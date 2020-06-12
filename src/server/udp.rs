@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::mpsc;
 use std::thread;
 
-pub struct Con {
+pub struct Server {
     socket: UdpSocket,
     rtable: HashMap<String, String>,
     tx: mpsc::Sender<(usize, [u8; 2048])>,
@@ -11,13 +11,13 @@ pub struct Con {
 }
 
 
-impl Con {
-    pub fn init(port: String) -> Con {
+impl Server {
+    pub fn init(port: String) -> Server {
         let socket  = UdpSocket::bind(format!("127.0.0.1:{}", port))
             .expect("Something went wrong while trying to create UDP socket!!");
         let rtable  = HashMap::new();
         let (tx, rx) = mpsc::channel();
-        Con {
+        Server {
             socket,
             rtable,
             tx,
@@ -47,11 +47,5 @@ impl Con {
         return (process_handler, listen_handler);
     }
 
-    pub fn send_discovery(&self) { 
-        let data    = String::from("Bojack Horseman");
-        let data_buffer = data.as_bytes();
-        self.socket.send_to(data_buffer, "TODO")
-            .expect("Something happened while sending discovery over UDP!!");
-    }
 }
 
