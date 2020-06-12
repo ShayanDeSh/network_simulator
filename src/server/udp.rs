@@ -1,39 +1,34 @@
 use std::net::UdpSocket;
 use std::collections::HashMap;
 use std::sync::mpsc;
+use std::sync::Mutex;
 use std::thread;
 
 pub struct Server {
     socket: UdpSocket,
-    rtable: HashMap<String, String>,
-    tx: mpsc::Sender<(usize, [u8; 2048])>,
-    rx: mpsc::Receiver<(usize, [u8; 2048])>
+    rtable: Mutex<HashMap<String, String>>,
 }
 
 
 impl Server {
-    pub fn init(port: String) -> Server {
+    pub fn init(port: &str, rtable: Mutex<HashMap<String, String>>) -> Server {
         let socket  = UdpSocket::bind(format!("127.0.0.1:{}", port))
             .expect("Something went wrong while trying to create UDP socket!!");
-        let rtable  = HashMap::new();
-        let (tx, rx) = mpsc::channel();
         Server {
             socket,
             rtable,
-            tx,
-            rx 
         }
     }
 
-    pub fn listen(self) -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
-        let soc = self.socket;
-        let tx  = self.tx;
-        let rx  = self.rx;
+    pub fn listen(&self) -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
+        let soc = self.socket.try_clone().expect("Could not clone");
+        let (tx, rx): (mpsc::Sender<(usize, [u8; 2048])>,
+        mpsc::Receiver<(usize, [u8; 2048])>) = mpsc::channel();
         let process_handler = thread::spawn(move || {
             loop {
                 let (amt, data) = rx.recv().unwrap();
-                let st          = std::str::from_utf8(&data[..amt]);
-                println!("{:?}", st);
+                let request = std::str::from_utf8(&data[..8]);
+                println!("{:?}", request);
             }
         });
         let listen_handler = thread::spawn(move || {
@@ -47,5 +42,12 @@ impl Server {
         return (process_handler, listen_handler);
     }
 
+}
+
+pub fn send(port: &str) {
+    let socket  = UdpSocket::bind(format!("127.0.0.1:{}", port))
+        .expect("");
+    socket.send_to("Bojac Horseman".as_bytes(),"127.0.0.1:8000")
+        .expect("Could not send");
 }
 
