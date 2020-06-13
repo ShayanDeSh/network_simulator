@@ -63,7 +63,10 @@ impl Server {
                     },
                     "list" => {
                         println!("got list");
-                    }
+                    },
+                    "disc" => {
+                        println!("got disc");
+                    },
                     _ => {
                         continue;
                     }
@@ -88,26 +91,42 @@ impl Server {
 
 
     fn send_discovery(&self, header: Header) {
-        let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
-        copy_str(&mut buf, 0, &header.request);
-        copy_u16(&mut buf, 4, header.dest_port);
-        copy_u16(&mut buf, 6, header.src_port);
-        copy_ip(&mut buf, 8, &header.dest_ip);
-        copy_ip(&mut buf, 12, &header.src_ip);
-        let mut remained_buffer: i32 = USEFUL_BUFFER_SIZE as i32;
-        let mut current: u16 = 16;
-        for host in &self.hosts {
-            remained_buffer -= mem::size_of::<Host>() as i32;
-            if remained_buffer < 0 {
-                break;
+        let mut counter = 0;
+        let mut flag = true;
+        while flag {
+            let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
+            self.copy_header(&mut buf, &header);
+            let mut remained_buffer: i32 = USEFUL_BUFFER_SIZE as i32;
+            let mut current: u16 = 16;
+            for i in counter..self.hosts.len() {
+                remained_buffer -= mem::size_of::<Host>() as i32;
+                if remained_buffer < 0 {
+                    counter = i;
+                    break;
+                }
+                if i == self.hosts.len() {
+                    flag = false;
+                }
+                let name_len = self.hosts[i].name.len() as u8;
+                buf[current as usize] = name_len;
+                current += 1;
+                copy_str(&mut buf, current, &self.hosts[i].name);
+                current += name_len as u16;
+                copy_ip(&mut buf, current, &self.hosts[i].ipaddr);
+                current += 4;
+                copy_u16(&mut buf, current, self.hosts[i].port);
             }
-            let name_len = host.name.len() as u8;
-            buf[current as usize] = name_len;
-            current += 1;
-            copy_str(&mut buf, current, &host.name);
-            current += name_len as u16;
-            copy_ip(&mut buf, current, &host.name);
+            self.send(&header.dest_ip, buf);
         }
+    }
+
+    fn copy_header(&self, buf: &mut [u8], header: &Header) -> u16 {
+            copy_str(buf, 0, &header.request);
+            copy_u16(buf, 4, header.dest_port);
+            copy_u16(buf, 6, header.src_port);
+            copy_ip(buf, 8, &header.dest_ip);
+            copy_ip(buf, 12, &header.src_ip);
+            return 16;
     }
 
     pub fn send(&self , ipaddr: &str, buf: [u8; BUFFER_SIZE]) {
