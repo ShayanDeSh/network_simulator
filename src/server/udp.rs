@@ -95,15 +95,18 @@ impl Server {
         copy_ip(&mut buf, 8, &header.dest_ip);
         copy_ip(&mut buf, 12, &header.src_ip);
         let mut remained_buffer: i32 = USEFUL_BUFFER_SIZE as i32;
-        let mut current = 16;
+        let mut current: u16 = 16;
         for host in &self.hosts {
             remained_buffer -= mem::size_of::<Host>() as i32;
             if remained_buffer < 0 {
                 break;
             }
             let name_len = host.name.len() as u8;
-            buf[current] = name_len;
+            buf[current as usize] = name_len;
             current += 1;
+            copy_str(&mut buf, current, &host.name);
+            current += name_len as u16;
+            copy_ip(&mut buf, current, &host.name);
         }
     }
 
@@ -130,9 +133,8 @@ fn copy_u16(buf: &mut [u8], current: u16, num: u16) {
 }
 
 fn copy_ip(buf: &mut [u8], current: u16, ip: &str) {
-    let ip = ip.replace(".", "");
-    let ip = ip.as_bytes();
+    let ip: Vec<&str>= ip.split(".").collect();
     for (i, num) in ip.iter().enumerate() {
-        buf[current as usize + i] = *num;
+        buf[current as usize + i] = num.parse::<u8>().expect("Wrong ip");
     }
 }
