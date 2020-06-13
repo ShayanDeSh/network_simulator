@@ -90,26 +90,10 @@ impl Server {
     fn send_discovery(&self, header: Header) {
         let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
         copy_str(&mut buf, 0, &header.request);
-        let req_byte = header.request.as_bytes();
-        for (i, byte) in req_byte.iter().enumerate() {
-            buf[i] = *byte;
-        }
-        let dport_bytes = header.dest_port.to_be_bytes();
-        buf[4] = dport_bytes[0];
-        buf[5] = dport_bytes[1];
-        let sport_bytes = header.src_port.to_be_bytes();
-        buf[6] = sport_bytes[0];
-        buf[7] = sport_bytes[1];
-        let dip = header.dest_ip.replace(".", "");
-        let dip = dip.as_bytes();
-        for (i, num) in dip.iter().enumerate() {
-            buf[8 + i] = *num;
-        }
-        let sip = header.src_ip.replace(".", "");
-        let sip = sip.as_bytes();
-        for (i, num) in sip.iter().enumerate() {
-            buf[12 + i] = *num;
-        }
+        copy_u16(&mut buf, 4, header.dest_port);
+        copy_u16(&mut buf, 6, header.src_port);
+        copy_ip(&mut buf, 8, &header.dest_ip);
+        copy_ip(&mut buf, 12, &header.src_ip);
         let mut remained_buffer: i32 = USEFUL_BUFFER_SIZE as i32;
         let mut current = 16;
         for host in &self.hosts {
@@ -133,8 +117,22 @@ impl Server {
 }
 
 fn copy_str(buf: &mut [u8], current: u16, string: &str) {
-    let req_byte = string.as_bytes();
-    for (i, byte) in req_byte.iter().enumerate() {
+    let string = string.as_bytes();
+    for (i, byte) in string.iter().enumerate() {
         buf[current as usize + i] = *byte;
+    }
+}
+
+fn copy_u16(buf: &mut [u8], current: u16, num: u16) {
+    let num = num.to_be_bytes();
+    buf[current as usize] = num[0];
+    buf[current as usize + 1] = num[1];
+}
+
+fn copy_ip(buf: &mut [u8], current: u16, ip: &str) {
+    let ip = ip.replace(".", "");
+    let ip = ip.as_bytes();
+    for (i, num) in ip.iter().enumerate() {
+        buf[current as usize + i] = *num;
     }
 }
