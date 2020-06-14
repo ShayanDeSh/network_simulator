@@ -1,6 +1,7 @@
 extern crate getopts;
 use std::env;
 use getopts::Options;
+use std::path::Path;
 
 mod server;
 
@@ -9,13 +10,14 @@ fn print_usage(program: &str, opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
-fn parse_arg() -> String {
+fn parse_arg() -> (String, String) {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
 
     let mut opts = Options::new();
     opts.optflag("h", "help", "This is help menu");
     opts.optopt("p", "port", "Enter a port for udp server", "PORT");
+    opts.optopt("l", "list", "List of hosts", "LIST");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(_f) => { 
@@ -28,18 +30,27 @@ fn parse_arg() -> String {
         std::process::exit(0);
     }    
     let port = matches.opt_str("p");
-    match port {
+    let port = match port {
         Some(x) => x,
         None => {
             eprintln!("Please enter a valid port");
             print_usage(&program, opts);
             std::process::exit(0);
         }
-    }
+    };
+    let location = matches.opt_str("l");
+    let location = match location {
+        Some(x) => x,
+        None => {
+            "".to_string()
+        }
+    };
+    println!("{:?}", location);
+    return (port, location);
 }
 
 fn main() {
-    let port = parse_arg();
+    let (port, location) = parse_arg();
     println!("{:?}", port);
     server::start(port);
 }
