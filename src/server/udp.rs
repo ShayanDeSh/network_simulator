@@ -21,11 +21,11 @@ pub struct Server {
 }
 
 pub struct Header {
-    request: String,
-    dest_port: u16,
-    src_port: u16,
-    dest_ip: String,
-    src_ip: String
+    pub request: String,
+    pub dest_port: u16,
+    pub src_port: u16,
+    pub dest_ip: String,
+    pub src_ip: String
 }
 
 
@@ -33,7 +33,13 @@ impl Server {
     pub fn init(port: &str, rtable: Mutex<HashMap<String, String>>) -> Server {
         let socket  = UdpSocket::bind(format!("127.0.0.1:{}", port))
             .expect("Something went wrong while trying to create UDP socket!!");
-        let hosts: Vec<Host> = Vec::new();
+        let mut hosts: Vec<Host> = Vec::new();
+        let h = Host {
+            name: "ss".to_string(),
+            ipaddr: "127.0.0.1".to_string(),
+            port: 8000
+        };
+        hosts.push(h);
         Server {
             socket,
             hosts,
@@ -48,15 +54,11 @@ impl Server {
         let process_handler = thread::spawn(move || {
             loop {
                 let (amt, data) = rx.recv().unwrap();
-                let request = std::str::from_utf8(&data[..4])
-                    .expect("Not parsable request type");
-                let request =  request.trim();
-                let dest_port: u16 = ((data[4] as u16) << 8) + data[5] as u16; 
-                let src_port: u16 = ((data[6] as u16) << 8) + data[7] as u16; 
-                let dest_ip: String = format!("{}.{}.{}.{}",
-                    data[8], data[9], data[10], data[11]);
-                let src_ip: String = format!("{}.{}.{}.{}",
-                    data[12], data[13], data[14], data[15]);
+                let request = extract_request(&data, 0, 4).trim(); 
+                let dest_port = extract_u16(&data, 4);
+                let src_port = extract_u16(&data, 6);
+                let dest_ip = extract_ip(&data, 8);
+                let src_ip = extract_ip(&data, 12);
                 match request {
                     "get" => {
                         println!("got get :)");
@@ -90,21 +92,20 @@ impl Server {
     }
 
 
-    fn send_discovery(&self, header: Header) {
+    pub fn send_discovery(&self, header: Header) {
         let mut counter = 0;
         let mut flag = true;
         while flag {
             let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
-            self.copy_header(&mut buf, &header);
+            let mut current: u16 = self.copy_header(&mut buf, &header);
             let mut remained_buffer: i32 = USEFUL_BUFFER_SIZE as i32;
-            let mut current: u16 = 16;
             for i in counter..self.hosts.len() {
                 remained_buffer -= mem::size_of::<Host>() as i32;
                 if remained_buffer < 0 {
                     counter = i;
                     break;
                 }
-                if i == self.hosts.len() {
+                if i == self.hosts.len() - 1 {
                     flag = false;
                 }
                 let name_len = self.hosts[i].name.len() as u8;
@@ -116,7 +117,7 @@ impl Server {
                 current += 4;
                 copy_u16(&mut buf, current, self.hosts[i].port);
             }
-            self.send(&header.dest_ip, buf);
+            self.send(&header.dest_ip, header.dest_port, buf);
         }
     }
 
@@ -129,10 +130,26 @@ impl Server {
             return 16;
     }
 
-    pub fn send(&self , ipaddr: &str, buf: [u8; BUFFER_SIZE]) {
+    fn extract_header(&self, data: &[u8]) -> Header {
+        let request = extract_request(&data, 0, 4).trim().to_string(); 
+        let dest_port = extract_u16(&data, 4);
+        let src_port = extract_u16(&data, 6);
+        let dest_ip = extract_ip(&data, 8);
+        let src_ip = extract_ip(&data, 12);
+        Header {
+            request,
+            dest_port,
+            src_port,
+            dest_ip,
+            src_ip
+        }
+    }
+
+    pub fn send(&self , ipaddr: &str,port: u16, buf: [u8; BUFFER_SIZE]) {
         let socket  = self.socket.try_clone()
             .expect("Could not clone socket for sending");
-        socket.send_to(&buf, ipaddr)
+        let ip = format!("{}:{}", ipaddr, port);
+        socket.send_to(&buf, ip)
             .expect("Could not send");
     }
 
@@ -156,4 +173,16 @@ fn copy_ip(buf: &mut [u8], current: u16, ip: &str) {
     for (i, num) in ip.iter().enumerate() {
         buf[current as usize + i] = num.parse::<u8>().expect("Wrong ip");
     }
+}
+
+fn extract_request(data: &[u8], start: usize, end: usize) -> &str {
+    std::str::from_utf8(&data[start..end]).expect("Could not extract str")
+}
+
+fn extract_u16(data: &[u8], start: usize) -> u16 {
+    ((data[start] as u16) << 8) + data[start + 1] as u16 
+}
+
+fn extract_ip(data: &[u8], start: usize) -> String {
+    format!("{}.{}.{}.{}", data[start], data[start + 1], data[start + 2], data[start + 3])
 }
