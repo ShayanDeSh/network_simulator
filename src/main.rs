@@ -45,12 +45,18 @@ fn parse_arg() -> (String, String) {
             "".to_string()
         }
     };
-    println!("{:?}", location);
+    let path = Path::new(&location);
+    if !path.exists() { 
+        eprintln!("Please enter a valid location for hosts list");
+        print_usage(&program, opts);
+        std::process::exit(0);
+    }
     return (port, location);
 }
 
 fn main() {
     let (port, location) = parse_arg();
     println!("{:?}", port);
+    println!("{:?}", location);
     server::start(port);
 }
