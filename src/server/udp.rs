@@ -9,15 +9,17 @@ const BUFFER_SIZE: usize = 2048;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
 
 pub struct Host {
-    name: String,
-    ipaddr: String,
-    port: u16
+    pub name: String,
+    pub ipaddr: String,
+    pub port: u16
 }
 
 pub struct Server<'a> {
     socket: UdpSocket,
     pub hosts: &'a mut Vec<Host>,
     rtable: Mutex<HashMap<String, String>>,
+    pub udp_port: u16,
+    pub ipaddr: String
 }
 
 pub struct Header {
@@ -27,6 +29,24 @@ pub struct Header {
     pub dest_ip: String,
     pub src_ip: String
 }
+
+
+impl Header {
+    pub fn new(request: &str, dest_port: u16,
+            src_port: u16, dest_ip: &str, src_ip: &str) -> Header {
+        let request = request.to_string();
+        let dest_ip = dest_ip.to_string();
+        let src_ip = src_ip.to_string();
+        Header {
+            request,
+            dest_port,
+            src_port,
+            dest_ip,
+            src_ip
+        }
+    }
+}
+
 
 impl Host {
     pub fn new(name: String, ipaddr: String, port: u16) -> Host {
@@ -39,13 +59,22 @@ impl Host {
 }
 
 impl<'a> Server<'a> {
-    pub fn init<'b>(port: &str, rtable: Mutex<HashMap<String, String>>, hosts: &'b mut Vec<Host>) -> Server<'b> {
-        let socket  = UdpSocket::bind(format!("127.0.0.1:{}", port))
+    pub fn init<'b>(
+        udp_port: &str,
+        rtable: Mutex<HashMap<String, String>>,
+        hosts: &'b mut Vec<Host>,
+        ipaddr: &str
+        ) -> Server<'b> {
+        let socket  = UdpSocket::bind(format!("127.0.0.1:{}", udp_port))
             .expect("Something went wrong while trying to create UDP socket!!");
+        let udp_port = udp_port.parse::<u16>().expect("non parsable port");
+        let ipaddr = ipaddr.to_string();
         Server {
             socket,
             hosts,
-            rtable
+            rtable,
+            udp_port,
+            ipaddr
         }
     }
 

@@ -10,17 +10,9 @@ pub fn start(port: String, location: String) {
     if !location.is_empty() {
         read_hosts(&mut hosts, &location);
     }
-    let h = udp::Header {
-        request: "disc".to_string(),
-        dest_port: 8000,
-        src_port: 8080,
-        dest_ip: "127.0.0.1".to_string(),
-        src_ip: "127.0.0.1".to_string()
-    };
     let table: HashMap<String, String> = HashMap::new();
     let rtable = Mutex::new(table);
-    let connection = udp::Server::init(&port, rtable, &mut hosts);
-    connection.send_discovery(h);
+    let connection = udp::Server::init(&port, rtable, &mut hosts, "127.0.0.1");
     let (process_handler, listen_handler) = connection.listen();
     process_handler.join().unwrap();
     listen_handler.join().unwrap();
@@ -43,6 +35,8 @@ fn read_hosts(hosts: &mut Vec<udp::Host>, location: &str) {
 
 fn start_discovery(connection: &udp::Server) {
     thread::sleep_ms(5000);
-    for (i, host) in connection.hosts.iter().enumerate() {
+    for (_, host) in connection.hosts.iter().enumerate() {
+        let header = udp::Header::new("disc", host.port, connection.udp_port, &host.ipaddr, "127.0.0.1");
+        connection.send_discovery(header);
     }
 }
