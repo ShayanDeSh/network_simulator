@@ -58,5 +58,5 @@ fn main() {
     let (port, location) = parse_arg();
     println!("{:?}", port);
     println!("{:?}", location);
-    server::start(port);
+    server::start(port, location);
 }
