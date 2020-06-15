@@ -14,6 +14,10 @@ pub fn start(port: String, location: String) {
     let rtable = Mutex::new(table);
     let connection = udp::Server::init(&port, rtable, &mut hosts, "127.0.0.1");
     let (process_handler, listen_handler) = connection.listen();
+    loop {
+        thread::sleep_ms(10000);
+        start_discovery(&connection);
+    }
     process_handler.join().unwrap();
     listen_handler.join().unwrap();
 }
@@ -21,7 +25,8 @@ pub fn start(port: String, location: String) {
 fn read_hosts(hosts: &mut Vec<udp::Host>, location: &str) {
     let raw_hosts = fs::read_to_string(location)
         .expect("could not read hosts form file");
-    let raw_hosts: Vec<&str> = raw_hosts.split("\n").collect();
+    let mut raw_hosts: Vec<&str> = raw_hosts.split("\n").collect();
+    raw_hosts.pop();
     for raw_host in raw_hosts {
         let host:Vec<&str> = raw_host.split(" ").collect();
         let host = udp::Host::new(
@@ -34,7 +39,6 @@ fn read_hosts(hosts: &mut Vec<udp::Host>, location: &str) {
 }
 
 fn start_discovery(connection: &udp::Server) {
-    thread::sleep_ms(5000);
     for (_, host) in connection.hosts.iter().enumerate() {
         let header = udp::Header::new("disc", host.port, connection.udp_port, &host.ipaddr, "127.0.0.1");
         connection.send_discovery(header);
