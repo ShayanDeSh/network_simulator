@@ -125,7 +125,7 @@ impl<'a> Server<'a> {
         let mut flag = true;
         while flag {
             let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
-            let mut current: u16 = self.copy_header(&mut buf, &header);
+            let mut current: u16 = Server::copy_header(&mut buf, &header);
             let mut remained_buffer: i32 = USEFUL_BUFFER_SIZE as i32;
             for i in counter..self.hosts.len() {
                 remained_buffer -= mem::size_of::<Host>() as i32;
@@ -149,7 +149,7 @@ impl<'a> Server<'a> {
         }
     }
 
-    fn copy_header(&self, buf: &mut [u8], header: &Header) -> u16 {
+    fn copy_header(buf: &mut [u8], header: &Header) -> u16 {
             copy_str(buf, 0, &header.request);
             copy_u16(buf, 4, header.dest_port);
             copy_u16(buf, 6, header.src_port);
