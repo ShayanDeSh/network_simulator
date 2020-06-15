@@ -14,9 +14,9 @@ pub struct Host {
     port: u16
 }
 
-pub struct Server {
+pub struct Server<'a> {
     socket: UdpSocket,
-    hosts: Vec<Host>,
+    pub hosts: &'a mut Vec<Host>,
     rtable: Mutex<HashMap<String, String>>,
 }
 
@@ -28,18 +28,20 @@ pub struct Header {
     pub src_ip: String
 }
 
+impl Host {
+    pub fn new(name: String, ipaddr: String, port: u16) -> Host {
+        Host {
+            name,
+            ipaddr,
+            port
+        }
+    }
+}
 
-impl Server {
-    pub fn init(port: &str, rtable: Mutex<HashMap<String, String>>) -> Server {
+impl<'a> Server<'a> {
+    pub fn init<'b>(port: &str, rtable: Mutex<HashMap<String, String>>, hosts: &'b mut Vec<Host>) -> Server<'b> {
         let socket  = UdpSocket::bind(format!("127.0.0.1:{}", port))
             .expect("Something went wrong while trying to create UDP socket!!");
-        let mut hosts: Vec<Host> = Vec::new();
-        let h = Host {
-            name: "ss".to_string(),
-            ipaddr: "127.0.0.1".to_string(),
-            port: 8000
-        };
-        hosts.push(h);
         Server {
             socket,
             hosts,
@@ -54,11 +56,8 @@ impl Server {
         let process_handler = thread::spawn(move || {
             loop {
                 let (amt, data) = rx.recv().unwrap();
-                let request = extract_request(&data, 0, 4).trim(); 
-                let dest_port = extract_u16(&data, 4);
-                let src_port = extract_u16(&data, 6);
-                let dest_ip = extract_ip(&data, 8);
-                let src_ip = extract_ip(&data, 12);
+                let header = Server::extract_header(&data);
+                let request:&str = &header.request;
                 match request {
                     "get" => {
                         println!("got get :)");
@@ -74,10 +73,10 @@ impl Server {
                     }
                 }
                 println!("{:?}", request);
-                println!("{:?}", dest_port);
-                println!("{:?}", src_port);
-                println!("{:?}", dest_ip);
-                println!("{:?}", src_ip);
+                println!("{:?}", header.dest_port);
+                println!("{:?}", header.src_port);
+                println!("{:?}", header.dest_ip);
+                println!("{:?}", header.src_ip);
             }
         });
         let listen_handler = thread::spawn(move || {
@@ -130,7 +129,7 @@ impl Server {
             return 16;
     }
 
-    fn extract_header(&self, data: &[u8]) -> Header {
+    fn extract_header(data: &[u8]) -> Header {
         let request = extract_request(&data, 0, 4).trim().to_string(); 
         let dest_port = extract_u16(&data, 4);
         let src_port = extract_u16(&data, 6);
