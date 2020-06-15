@@ -1,24 +1,25 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::fs;
 use std::thread;
+use std::sync::{Mutex, Arc, RwLock};
 
 mod udp;
 
 pub fn start(port: String, location: String) {
-    let mut hosts: HashMap<String, udp::Host> = HashMap::new();
+    let hosts: Arc<RwLock<HashMap<String, udp::Host>>> = Arc::new(RwLock::new(HashMap::new()));
     if !location.is_empty() {
-        read_hosts(&mut hosts, &location);
+        read_hosts(hosts.clone(), &location);
     }
     let table: HashMap<String, String> = HashMap::new();
     let rtable = Mutex::new(table);
-    let connection = udp::Server::init(&port, rtable, &mut hosts, "127.0.0.1");
+    let connection = udp::Server::init(&port, rtable, hosts, "127.0.0.1");
     let (process_handler, listen_handler) = connection.listen();
     process_handler.join().unwrap();
     listen_handler.join().unwrap();
 }
 
-fn read_hosts(hosts: &mut HashMap<String, udp::Host>, location: &str) {
+fn read_hosts(hosts: Arc<RwLock<HashMap<String, udp::Host>>>, location: &str) {
+    let mut hosts = hosts.write().unwrap();
     let raw_hosts = fs::read_to_string(location)
         .expect("could not read hosts form file");
     let mut raw_hosts: Vec<&str> = raw_hosts.split("\n").collect();

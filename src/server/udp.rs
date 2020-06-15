@@ -15,9 +15,9 @@ pub struct Host {
     pub port: u16
 }
 
-pub struct Server<'a> {
+pub struct Server {
     socket: UdpSocket,
-    pub hosts: &'a mut HashMap<String, Host>,
+    pub hosts: Arc<RwLock<HashMap<String, Host>>> ,
     rtable: Mutex<HashMap<String, String>>,
     pub udp_port: u16,
     pub ipaddr: String
@@ -59,13 +59,13 @@ impl Host {
     }
 }
 
-impl<'a> Server<'a> {
-    pub fn init<'b>(
+impl Server {
+    pub fn init(
         udp_port: &str,
         rtable: Mutex<HashMap<String, String>>,
-        hosts: &'b mut HashMap<String, Host>,
+        hosts: Arc<RwLock<HashMap<String, Host>>>,
         ipaddr: &str
-        ) -> Server<'b> {
+        ) -> Server {
         let socket  = UdpSocket::bind(format!("127.0.0.1:{}", udp_port))
             .expect("Something went wrong while trying to create UDP socket!!");
         let udp_port = udp_port.parse::<u16>().expect("non parsable port");
@@ -79,22 +79,23 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn listen<'b>(self) -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
+    pub fn listen(self) -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
         let soc = self.socket.try_clone().expect("Could not clone");
         let soc2 = self.socket.try_clone().expect("Could not clone");
         let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
         mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
 //        let x:&'a mut HashMap<String, Host> = self.hosts;
-        let x: Arc<RwLock<&'a mut HashMap<String, Host>>> = Arc::new(RwLock::new(self.hosts));
-        let y = x.clone();
+        let x = self.hosts.clone();
+        let z = self.hosts.clone();
+        let y = self.hosts.clone();
         let udp_p: u16 = self.udp_port.clone();
         let discover_handler = thread::spawn(move || {
             loop {
                 thread::sleep_ms(10000);
-                let hosts = x.read().unwrap();
+                let hosts = z.read().unwrap();
                 for (key, host) in hosts.iter() {
                     let header = Header::new("disc", host.port, udp_p, &host.ipaddr, "127.0.0.1");
-                    Server::send_discovery(&soc2, x, header);
+                    Server::send_discovery(&soc2, x.clone(), header);
                 }
             }
         });
@@ -111,7 +112,7 @@ impl<'a> Server<'a> {
                         println!("got list");
                     },
                     "disc" => {
-                        Server::extract_disc_body(y, &data, 16, amt - 16);
+                        Server::extract_disc_body(y.clone(), &data, 16, amt - 16);
                     },
                     _ => {
                         continue;
@@ -135,7 +136,7 @@ impl<'a> Server<'a> {
         return (process_handler, listen_handler);
     }
 
-    fn extract_disc_body(hosts: Arc<RwLock<&'a mut HashMap<String, Host>>> , data: &[u8], current: usize, end: usize) {
+    fn extract_disc_body(hosts: Arc<RwLock<HashMap<String, Host>>> , data: &[u8], current: usize, end: usize) {
         let mut current = current;
         let mut hosts = hosts.write().unwrap();
         while current < end { 
@@ -156,7 +157,7 @@ impl<'a> Server<'a> {
     }
 
 
-    pub fn send_discovery(socket: &UdpSocket, hosts: Arc<RwLock<&'a mut HashMap<String, Host>>>, header: Header) {
+    pub fn send_discovery(socket: &UdpSocket, hosts: Arc<RwLock<HashMap<String, Host>>>, header: Header) {
         let mut counter = 0;
         let mut flag = true;
         let hosts = hosts.read().unwrap();
