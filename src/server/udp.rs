@@ -1,7 +1,8 @@
 use std::net::UdpSocket;
+
 use std::collections::HashMap;
 use std::sync::mpsc;
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc, RwLock};
 use std::thread;
 use std::mem;
 
@@ -16,7 +17,7 @@ pub struct Host {
 
 pub struct Server<'a> {
     socket: UdpSocket,
-    pub hosts: &'a mut Vec<Host>,
+    pub hosts: &'a mut HashMap<String, Host>,
     rtable: Mutex<HashMap<String, String>>,
     pub udp_port: u16,
     pub ipaddr: String
@@ -62,7 +63,7 @@ impl<'a> Server<'a> {
     pub fn init<'b>(
         udp_port: &str,
         rtable: Mutex<HashMap<String, String>>,
-        hosts: &'b mut Vec<Host>,
+        hosts: &'b mut HashMap<String, Host>,
         ipaddr: &str
         ) -> Server<'b> {
         let socket  = UdpSocket::bind(format!("127.0.0.1:{}", udp_port))
@@ -78,10 +79,25 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn listen(&self) -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
+    pub fn listen<'b>(self) -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
         let soc = self.socket.try_clone().expect("Could not clone");
+        let soc2 = self.socket.try_clone().expect("Could not clone");
         let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
         mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
+//        let x:&'a mut HashMap<String, Host> = self.hosts;
+        let x: Arc<RwLock<&'a mut HashMap<String, Host>>> = Arc::new(RwLock::new(self.hosts));
+        let y = x.clone();
+        let udp_p: u16 = self.udp_port.clone();
+        let discover_handler = thread::spawn(move || {
+            loop {
+                thread::sleep_ms(10000);
+                let hosts = x.read().unwrap();
+                for (key, host) in hosts.iter() {
+                    let header = Header::new("disc", host.port, udp_p, &host.ipaddr, "127.0.0.1");
+                    Server::send_discovery(&soc2, x, header);
+                }
+            }
+        });
         let process_handler = thread::spawn(move || {
             loop {
                 let (amt, data) = rx.recv().unwrap();
@@ -95,7 +111,7 @@ impl<'a> Server<'a> {
                         println!("got list");
                     },
                     "disc" => {
-                        Server::extract_disc_body(&data, 16, amt - 16);
+                        Server::extract_disc_body(y, &data, 16, amt - 16);
                     },
                     _ => {
                         continue;
@@ -119,9 +135,9 @@ impl<'a> Server<'a> {
         return (process_handler, listen_handler);
     }
 
-    fn extract_disc_body(data: &[u8], current: usize, end: usize) {
+    fn extract_disc_body(hosts: Arc<RwLock<&'a mut HashMap<String, Host>>> , data: &[u8], current: usize, end: usize) {
         let mut current = current;
-        let mut hosts: Vec<Host> = Vec::new();
+        let mut hosts = hosts.write().unwrap();
         while current < end { 
             let name_len = data[current];
             current += 1;
@@ -131,39 +147,50 @@ impl<'a> Server<'a> {
             current += 4;
             let port = extract_u16(data, current);
             current += 2;
-            let host = Host::new(name.to_string(), ipaddr, port);
-            hosts.push(host);
+            let key = format!("{}:{}", ipaddr, port);
+            if !hosts.contains_key(&key) {
+                let host = Host::new(name.to_string(), ipaddr, port);
+                hosts.insert(key, host); 
+            }
         }
     }
 
 
-    pub fn send_discovery(&self, header: Header) {
+    pub fn send_discovery(socket: &UdpSocket, hosts: Arc<RwLock<&'a mut HashMap<String, Host>>>, header: Header) {
         let mut counter = 0;
         let mut flag = true;
+        let hosts = hosts.read().unwrap();
+        let hosts: Vec<&Host> = hosts.iter().map(|(_, host)| host).collect();
         while flag {
             let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
             let mut current: u16 = Server::copy_header(&mut buf, &header);
             let mut remained_buffer: i32 = USEFUL_BUFFER_SIZE as i32;
-            for i in counter..self.hosts.len() {
+            for i in counter..hosts.len() {
                 remained_buffer -= mem::size_of::<Host>() as i32;
                 if remained_buffer < 0 {
                     counter = i;
                     break;
                 }
-                if i == self.hosts.len() - 1 {
+                if i == hosts.len() - 1 {
                     flag = false;
                 }
-                let name_len = self.hosts[i].name.len() as u8;
+                let name_len = hosts[i].name.len() as u8;
                 buf[current as usize] = name_len;
                 current += 1;
-                copy_str(&mut buf, current, &self.hosts[i].name);
+                copy_str(&mut buf, current, &hosts[i].name);
                 current += name_len as u16;
-                copy_ip(&mut buf, current, &self.hosts[i].ipaddr);
+                copy_ip(&mut buf, current, &hosts[i].ipaddr);
                 current += 4;
-                copy_u16(&mut buf, current, self.hosts[i].port);
+                copy_u16(&mut buf, current, hosts[i].port);
             }
-            self.send(&header.dest_ip, header.dest_port, buf);
+            Server::send(&socket, &header.dest_ip, header.dest_port, buf);
         }
+    }
+
+    pub fn send(socket: &UdpSocket, ipaddr: &str,port: u16, buf: [u8; BUFFER_SIZE]) {
+        let ip = format!("{}:{}", ipaddr, port);
+        socket.send_to(&buf, ip)
+            .expect("Could not send");
     }
 
     fn copy_header(buf: &mut [u8], header: &Header) -> u16 {
@@ -188,14 +215,6 @@ impl<'a> Server<'a> {
             dest_ip,
             src_ip
         }
-    }
-
-    pub fn send(&self , ipaddr: &str,port: u16, buf: [u8; BUFFER_SIZE]) {
-        let socket  = self.socket.try_clone()
-            .expect("Could not clone socket for sending");
-        let ip = format!("{}:{}", ipaddr, port);
-        socket.send_to(&buf, ip)
-            .expect("Could not send");
     }
 
 }
@@ -231,3 +250,4 @@ fn extract_u16(data: &[u8], start: usize) -> u16 {
 fn extract_ip(data: &[u8], start: usize) -> String {
     format!("{}.{}.{}.{}", data[start], data[start + 1], data[start + 2], data[start + 3])
 }
+
