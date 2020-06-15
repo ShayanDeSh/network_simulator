@@ -95,7 +95,7 @@ impl<'a> Server<'a> {
                         println!("got list");
                     },
                     "disc" => {
-                        println!("got disc");
+                        Server::extract_disc_body(&data, 16, amt - 16);
                     },
                     _ => {
                         continue;
@@ -117,6 +117,23 @@ impl<'a> Server<'a> {
             }
         });
         return (process_handler, listen_handler);
+    }
+
+    fn extract_disc_body(data: &[u8], current: usize, end: usize) {
+        let mut current = current;
+        let mut hosts: Vec<Host> = Vec::new();
+        while current < end { 
+            let name_len = data[current];
+            current += 1;
+            let name = extract_str(data, current, current + name_len as usize);
+            current += name_len as usize;
+            let ipaddr = extract_ip(data, current);
+            current += 4;
+            let port = extract_u16(data, current);
+            current += 2;
+            let host = Host::new(name.to_string(), ipaddr, port);
+            hosts.push(host);
+        }
     }
 
 
@@ -159,7 +176,7 @@ impl<'a> Server<'a> {
     }
 
     fn extract_header(data: &[u8]) -> Header {
-        let request = extract_request(&data, 0, 4).trim().to_string(); 
+        let request = extract_str(&data, 0, 4).trim().to_string(); 
         let dest_port = extract_u16(&data, 4);
         let src_port = extract_u16(&data, 6);
         let dest_ip = extract_ip(&data, 8);
@@ -203,7 +220,7 @@ fn copy_ip(buf: &mut [u8], current: u16, ip: &str) {
     }
 }
 
-fn extract_request(data: &[u8], start: usize, end: usize) -> &str {
+fn extract_str(data: &[u8], start: usize, end: usize) -> &str {
     std::str::from_utf8(&data[start..end]).expect("Could not extract str")
 }
 
