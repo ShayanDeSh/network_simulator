@@ -87,13 +87,17 @@ impl Server {
         let x = self.hosts.clone();
         let z = self.hosts.clone();
         let y = self.hosts.clone();
+        let myaddr = self.ipaddr.clone();
         let udp_p: u16 = self.udp_port.clone();
-        let discover_handler = thread::spawn(move || {
+        let _discover_handler = thread::spawn(move || {
             loop {
                 thread::sleep_ms(10000);
                 let hosts = z.read().unwrap();
-                for (key, host) in hosts.iter() {
-                    let header = Header::new("disc", host.port, udp_p, &host.ipaddr, "127.0.0.1");
+                for (_, host) in hosts.iter() {
+                    if host.ipaddr == myaddr && host.port == udp_p {
+                        continue
+                    }
+                    let header = Header::new("disc", host.port, udp_p, &host.ipaddr, &myaddr);
                     Server::send_discovery(&soc2, x.clone(), header);
                 }
             }
@@ -127,7 +131,7 @@ impl Server {
         let listen_handler = thread::spawn(move || {
             loop {
                 let mut buf = [32; BUFFER_SIZE];
-                let (amt, src) = soc.recv_from(&mut buf)
+                let (amt, _src) = soc.recv_from(&mut buf)
                     .expect("shit happened");
                 tx.send((amt, buf)).unwrap();
             }
