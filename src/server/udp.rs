@@ -106,7 +106,8 @@ impl Server {
             loop {
                 let (amt, data) = rx.recv().unwrap();
                 let header = Server::extract_header(&data);
-                let request:&str = &header.request;
+                let request:&str = &header.request.replace("\u{0}", "");
+                println!("{:?}", request);
                 match request {
                     "get" => {
                         println!("got get :)");
@@ -118,11 +119,6 @@ impl Server {
                         continue;
                     }
                 }
-                println!("{:?}", request);
-                println!("{:?}", header.dest_port);
-                println!("{:?}", header.src_port);
-                println!("{:?}", header.dest_ip);
-                println!("{:?}", header.src_ip);
             }
         });
         let listen_handler = thread::spawn(move || {
@@ -167,9 +163,6 @@ impl Server {
         src_port: u16, src_ip: &str) {
         let hosts = hosts.read().unwrap();
         for (_, host) in hosts.iter() {
-            if host.ipaddr == src_ip && host.port == src_port {
-                continue;
-            }
             let mut buf: [u8; 2048] = [0; 2048];
             let header = Header::new("get", host.port, src_port,
                 &host.ipaddr, src_ip);
@@ -181,6 +174,7 @@ impl Server {
             current += path_len;
             Server::send(&socket, &host.ipaddr,
                 host.port, buf, current as usize);
+            println!("sending");
         }
     }
 

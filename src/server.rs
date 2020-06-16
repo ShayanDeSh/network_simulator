@@ -24,21 +24,23 @@ pub fn start(port: String, location: String) {
             let mut input = String::new();
             io::stdin().read_line(&mut input)
                 .expect("Something Went wrong on reading from input");
-            input = input.trim().to_string();
-            let list = "list".to_string();
-            let get = "get".to_string();
+            let input = input.trim();
             match input  {
-                list => {
+                "list" => {
                     let hosts = list_clone.read().unwrap();
                     print_hosts(&hosts);
                 },
-                get => {
+                "get" => {
+                    println!("here");
                     let mut input = String::new();
                     io::stdin().read_line(&mut input)
                         .expect("Something Went wrong on reading from input");
                     input = input.trim().to_string();
                     udp::Server::get(&socket, &input, hosts.clone(), 
                         port.parse::<u16>().unwrap(), "127.0.0.1"); 
+                }, 
+                _ => {
+                    continue;
                 }
             }
         }
