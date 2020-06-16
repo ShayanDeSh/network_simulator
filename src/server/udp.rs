@@ -1,5 +1,4 @@
 use std::net::UdpSocket;
-
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::{Mutex, Arc, RwLock};
@@ -47,7 +46,6 @@ impl Header {
         }
     }
 }
-
 
 impl Host {
     pub fn new(name: String, ipaddr: String, port: u16) -> Host {
@@ -97,7 +95,8 @@ impl Server {
                     if host.ipaddr == myaddr && host.port == udp_p {
                         continue
                     }
-                    let header = Header::new("disc", host.port, udp_p, &host.ipaddr, &myaddr);
+                    let header = Header::new("disc",
+                        host.port, udp_p, &host.ipaddr, &myaddr);
                     Server::send_discovery(&soc2, x.clone(), header);
                 }
             }
@@ -136,7 +135,8 @@ impl Server {
         return (process_handler, listen_handler);
     }
 
-    fn discovery(hosts: Arc<RwLock<HashMap<String, Host>>> , data: &[u8], current: usize, end: usize) {
+    fn discovery(hosts: Arc<RwLock<HashMap<String, Host>>>,
+        data: &[u8], current: usize, end: usize) {
         let mut current = current;
         let mut hosts = hosts.write().unwrap();
         while current < end { 
@@ -161,8 +161,12 @@ impl Server {
         }
     }
 
+    pub fn get(socket: &UdpSocket, path: &str) {
+        let header = Header::new();
+    }
 
-    pub fn send_discovery(socket: &UdpSocket, hosts: Arc<RwLock<HashMap<String, Host>>>, header: Header) {
+    pub fn send_discovery(socket: &UdpSocket,
+        hosts: Arc<RwLock<HashMap<String, Host>>>, header: Header) {
         let mut counter = 0;
         let mut flag = true;
         let hosts = hosts.read().unwrap();
@@ -190,11 +194,13 @@ impl Server {
                 copy_u16(&mut buf, current, hosts[i].port);
                 current += 2;
             }
-            Server::send(&socket, &header.dest_ip, header.dest_port, buf, current as usize);
+            Server::send(&socket, &header.dest_ip, header.dest_port,
+                buf, current as usize);
         }
     }
 
-    pub fn send(socket: &UdpSocket, ipaddr: &str,port: u16, buf: [u8; BUFFER_SIZE], amt: usize) {
+    pub fn send(socket: &UdpSocket,
+        ipaddr: &str,port: u16, buf: [u8; BUFFER_SIZE], amt: usize) {
         let ip = format!("{}:{}", ipaddr, port);
         socket.send_to(&buf[0..amt], ip)
             .expect("Could not send");
@@ -255,6 +261,7 @@ fn extract_u16(data: &[u8], start: usize) -> u16 {
 }
 
 fn extract_ip(data: &[u8], start: usize) -> String {
-    format!("{}.{}.{}.{}", data[start], data[start + 1], data[start + 2], data[start + 3])
+    format!("{}.{}.{}.{}", data[start], data[start + 1],
+        data[start + 2], data[start + 3])
 }
 
