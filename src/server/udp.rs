@@ -111,9 +111,6 @@ impl Server {
                     "get" => {
                         println!("got get :)");
                     },
-                    "list" => {
-                        println!("got list");
-                    },
                     "disc" => {
                         Server::discovery(y.clone(), &data, 16, amt);
                     },

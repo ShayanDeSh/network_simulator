@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::thread;
 use std::sync::{Mutex, Arc, RwLock};
+use std::io;
 
 mod udp;
 
@@ -10,12 +11,33 @@ pub fn start(port: String, location: String) {
     if !location.is_empty() {
         read_hosts(hosts.clone(), &location);
     }
+    let list_clone =  hosts.clone();
+    thread::spawn(move || {
+        loop {
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)
+                .expect("Something Went wrong on reading from input");
+            input = input.trim().to_string();
+            if input == "list" {
+                let hosts = list_clone.read().unwrap();
+                print_hosts(&hosts);
+            }
+        }
+    });
     let table: HashMap<String, String> = HashMap::new();
     let rtable = Mutex::new(table);
-    let connection = udp::Server::init(&port, rtable, hosts, "127.0.0.1");
+    let connection = udp::Server::init(&port, rtable, hosts.clone(), "127.0.0.1");
     let (process_handler, listen_handler) = connection.listen();
     process_handler.join().unwrap();
     listen_handler.join().unwrap();
+}
+
+fn print_hosts(hosts: &HashMap<String, udp::Host>) {
+    for (_, host) in hosts {
+        println!("Name: {:?}", host.name);
+        println!("IP adrr.: {:?}", host.ipaddr);
+        println!("Port: {}", host.port);
+    }
 }
 
 fn read_hosts(hosts: Arc<RwLock<HashMap<String, udp::Host>>>, location: &str) {
