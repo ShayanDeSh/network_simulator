@@ -115,7 +115,7 @@ impl Server {
                         println!("got list");
                     },
                     "disc" => {
-                        Server::extract_disc_body(y.clone(), &data, 16, amt);
+                        Server::discovery(y.clone(), &data, 16, amt);
                     },
                     _ => {
                         continue;
@@ -139,7 +139,7 @@ impl Server {
         return (process_handler, listen_handler);
     }
 
-    fn extract_disc_body(hosts: Arc<RwLock<HashMap<String, Host>>> , data: &[u8], current: usize, end: usize) {
+    fn discovery(hosts: Arc<RwLock<HashMap<String, Host>>> , data: &[u8], current: usize, end: usize) {
         let mut current = current;
         let mut hosts = hosts.write().unwrap();
         while current < end { 
