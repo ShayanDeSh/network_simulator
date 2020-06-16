@@ -4,6 +4,7 @@ use std::sync::mpsc;
 use std::sync::{Mutex, Arc, RwLock};
 use std::thread;
 use std::mem;
+use std::time::Duration;
 
 const BUFFER_SIZE: usize = 2048;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
@@ -15,7 +16,7 @@ pub struct Host {
 }
 
 pub struct Server {
-    socket: UdpSocket,
+    pub socket: UdpSocket,
     pub hosts: Arc<RwLock<HashMap<String, Host>>> ,
     rtable: Mutex<HashMap<String, String>>,
     pub udp_port: u16,
@@ -89,7 +90,7 @@ impl Server {
         let udp_p: u16 = self.udp_port.clone();
         let _discover_handler = thread::spawn(move || {
             loop {
-                thread::sleep_ms(10000);
+                thread::sleep(Duration::from_secs(10));
                 let hosts = z.read().unwrap();
                 for (_, host) in hosts.iter() {
                     if host.ipaddr == myaddr && host.port == udp_p {
@@ -161,8 +162,26 @@ impl Server {
         }
     }
 
-    pub fn get(socket: &UdpSocket, path: &str) {
-        let header = Header::new();
+    pub fn get(socket: &UdpSocket, path: &str,
+        hosts: Arc<RwLock<HashMap<String, Host>>>,
+        src_port: u16, src_ip: &str) {
+        let hosts = hosts.read().unwrap();
+        for (_, host) in hosts.iter() {
+            if host.ipaddr == src_ip && host.port == src_port {
+                continue;
+            }
+            let mut buf: [u8; 2048] = [0; 2048];
+            let header = Header::new("get", host.port, src_port,
+                &host.ipaddr, src_ip);
+            let mut current = Server::copy_header(&mut buf, &header);
+            let path_len = path.len() as u16;
+            copy_u16(&mut buf, current, path_len);
+            current += 2;
+            copy_str(&mut buf, current, path);
+            current += path_len;
+            Server::send(&socket, &host.ipaddr,
+                host.port, buf, current as usize);
+        }
     }
 
     pub fn send_discovery(socket: &UdpSocket,

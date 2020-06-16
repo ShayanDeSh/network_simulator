@@ -7,26 +7,42 @@ use std::io;
 mod udp;
 
 pub fn start(port: String, location: String) {
-    let hosts: Arc<RwLock<HashMap<String, udp::Host>>> = Arc::new(RwLock::new(HashMap::new()));
+    let table: HashMap<String, String> = HashMap::new();
+    let rtable = Mutex::new(table);
+    let hosts: Arc<RwLock<HashMap<String, udp::Host>>> = 
+        Arc::new(RwLock::new(HashMap::new()));
     if !location.is_empty() {
         read_hosts(hosts.clone(), &location);
     }
     let list_clone =  hosts.clone();
+    let connection = udp::Server::init(&port, rtable,
+        hosts.clone(), "127.0.0.1");
+    let socket = connection.socket.try_clone()
+    .expect("Could not clone socket");
     thread::spawn(move || {
         loop {
             let mut input = String::new();
             io::stdin().read_line(&mut input)
                 .expect("Something Went wrong on reading from input");
             input = input.trim().to_string();
-            if input == "list" {
-                let hosts = list_clone.read().unwrap();
-                print_hosts(&hosts);
+            let list = "list".to_string();
+            let get = "get".to_string();
+            match input  {
+                list => {
+                    let hosts = list_clone.read().unwrap();
+                    print_hosts(&hosts);
+                },
+                get => {
+                    let mut input = String::new();
+                    io::stdin().read_line(&mut input)
+                        .expect("Something Went wrong on reading from input");
+                    input = input.trim().to_string();
+                    udp::Server::get(&socket, &input, hosts.clone(), 
+                        port.parse::<u16>().unwrap(), "127.0.0.1"); 
+                }
             }
         }
     });
-    let table: HashMap<String, String> = HashMap::new();
-    let rtable = Mutex::new(table);
-    let connection = udp::Server::init(&port, rtable, hosts.clone(), "127.0.0.1");
     let (process_handler, listen_handler) = connection.listen();
     process_handler.join().unwrap();
     listen_handler.join().unwrap();
