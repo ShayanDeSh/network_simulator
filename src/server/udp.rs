@@ -84,7 +84,6 @@ impl Server {
         let soc2 = self.socket.try_clone().expect("Could not clone");
         let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
         mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
-//        let x:&'a mut HashMap<String, Host> = self.hosts;
         let x = self.hosts.clone();
         let z = self.hosts.clone();
         let y = self.hosts.clone();
@@ -112,7 +111,7 @@ impl Server {
                         println!("got list");
                     },
                     "disc" => {
-                        Server::extract_disc_body(y.clone(), &data, 16, amt - 16);
+                        Server::extract_disc_body(y.clone(), &data, 16, amt);
                     },
                     _ => {
                         continue;
@@ -148,7 +147,12 @@ impl Server {
             current += 4;
             let port = extract_u16(data, current);
             current += 2;
+            println!("{}", name_len);
+            println!("{:?}", name);
+            println!("{:?}", ipaddr);
+            println!("{}", port);
             let key = format!("{}:{}", ipaddr, port);
+            println!("{:?}", key);
             if !hosts.contains_key(&key) {
                 let host = Host::new(name.to_string(), ipaddr, port);
                 hosts.insert(key, host); 
@@ -183,14 +187,15 @@ impl Server {
                 copy_ip(&mut buf, current, &hosts[i].ipaddr);
                 current += 4;
                 copy_u16(&mut buf, current, hosts[i].port);
+                current += 2;
             }
-            Server::send(&socket, &header.dest_ip, header.dest_port, buf);
+            Server::send(&socket, &header.dest_ip, header.dest_port, buf, current as usize);
         }
     }
 
-    pub fn send(socket: &UdpSocket, ipaddr: &str,port: u16, buf: [u8; BUFFER_SIZE]) {
+    pub fn send(socket: &UdpSocket, ipaddr: &str,port: u16, buf: [u8; BUFFER_SIZE], amt: usize) {
         let ip = format!("{}:{}", ipaddr, port);
-        socket.send_to(&buf, ip)
+        socket.send_to(&buf[0..amt], ip)
             .expect("Could not send");
     }
 
