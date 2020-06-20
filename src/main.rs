@@ -10,7 +10,7 @@ fn print_usage(program: &str, opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
-fn parse_arg() -> (String, String) {
+fn parse_arg() -> (String, String, String) {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
 
@@ -18,6 +18,7 @@ fn parse_arg() -> (String, String) {
     opts.optflag("h", "help", "This is help menu");
     opts.optopt("p", "port", "Enter a port for udp server", "PORT");
     opts.optopt("l", "list", "List of hosts", "LIST");
+    opts.optopt("d", "dir", "Files Directory", "DIR");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(_f) => { 
@@ -51,12 +52,26 @@ fn parse_arg() -> (String, String) {
         print_usage(&program, opts);
         std::process::exit(0);
     }
-    return (port, location);
+    let dir_location = matches.opt_str("d");
+    let dir_location = match dir_location {
+        Some(x) => x,
+        None => {
+            "".to_string()
+        }
+    };
+    let path = Path::new(&dir_location);
+    if !path.exists() { 
+        eprintln!("Please enter a valid location for files");
+        print_usage(&program, opts);
+        std::process::exit(0);
+    }
+    return (port, location, dir_location);
 }
 
 fn main() {
-    let (port, location) = parse_arg();
+    let (port, location, dir_location) = parse_arg();
     println!("{:?}", port);
     println!("{:?}", location);
+    println!("{:?}", dir_location);
     server::start(port, location);
 }
