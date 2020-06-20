@@ -139,7 +139,17 @@ impl Server {
                         Server::discovery(y.clone(), &data, 16, amt);
                     },
                     "OK" => {
-                        println!("ok ok");
+                        let file_len = extract_u16(&data, current) as usize;
+                        let file = extract_str(&data, current,
+                            current + file_len);
+                        let mut buf: [u8; 2048] = [0; 2048];
+                        let req_header = Header::new("star",
+                            header.src_port, header.dest_port,
+                            &header.src_ip, &header.dest_ip);
+                        Server::create_file_packet(&mut buf,
+                            &req_header, file); 
+                    },
+                    "star" => {
                     },
                     _ => {
                         continue;
@@ -184,6 +194,17 @@ impl Server {
         }
     }
 
+    fn create_file_packet(buf: &mut [u8], header: &Header,
+        body: &str) -> usize {
+            let mut current = Server::copy_header(buf, &header);
+            let body_len = body.len() as u16;
+            copy_u16(buf, current, body_len);
+            current += 2;
+            copy_str(buf, current, body);
+            current += body_len;
+            current as usize
+    }
+
     pub fn get(socket: &UdpSocket, path: &str,
         hosts: Arc<RwLock<HashMap<String, Host>>>,
         src_port: u16, src_ip: &str) {
@@ -192,12 +213,7 @@ impl Server {
             let mut buf: [u8; 2048] = [0; 2048];
             let header = Header::new("get", host.port, src_port,
                 &host.ipaddr, src_ip);
-            let mut current = Server::copy_header(&mut buf, &header);
-            let path_len = path.len() as u16;
-            copy_u16(&mut buf, current, path_len);
-            current += 2;
-            copy_str(&mut buf, current, path);
-            current += path_len;
+            let current = Server::create_file_packet(&mut buf, &header, path);
             Server::send(&socket, &host.ipaddr,
                 host.port, buf, current as usize);
             println!("sending");
