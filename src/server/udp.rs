@@ -176,12 +176,7 @@ impl Server {
             current += 4;
             let port = extract_u16(data, current);
             current += 2;
-            println!("{}", name_len);
-            println!("{:?}", name);
-            println!("{:?}", ipaddr);
-            println!("{}", port);
             let key = format!("{}:{}", ipaddr, port);
-            println!("{:?}", key);
             if !hosts.contains_key(&key) {
                 let host = Host::new(name.to_string(), ipaddr, port);
                 hosts.insert(key, host); 
