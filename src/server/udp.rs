@@ -5,6 +5,7 @@ use std::sync::{Mutex, Arc, RwLock};
 use std::thread;
 use std::mem;
 use std::time::Duration;
+use std::fs;
 
 const BUFFER_SIZE: usize = 2048;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
@@ -66,7 +67,8 @@ impl Server {
         ipaddr: &str
         ) -> Server {
         let socket  = UdpSocket::bind(format!("127.0.0.1:{}", udp_port))
-            .expect("Something went wrong while trying to create UDP socket!!");
+            .expect("Something went
+                wrong while trying to create UDP socket!!");
         let udp_port = udp_port.parse::<u16>().expect("non parsable port");
         let ipaddr = ipaddr.to_string();
         Server {
@@ -78,7 +80,8 @@ impl Server {
         }
     }
 
-    pub fn listen(self) -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
+    pub fn listen(self, dir: String)
+        -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
         let soc = self.socket.try_clone().expect("Could not clone");
         let soc2 = self.socket.try_clone().expect("Could not clone");
         let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
@@ -107,10 +110,22 @@ impl Server {
                 let (amt, data) = rx.recv().unwrap();
                 let header = Server::extract_header(&data);
                 let request:&str = &header.request.replace("\u{0}", "");
-                println!("{:?}", request);
+                println!("recived {:?}", request);
                 match request {
                     "get" => {
-                        println!("got get :)");
+                        let files = fs::read_dir(&dir)
+                            .expect("could not read dir");
+                        for file in files {
+                            let req_file = file
+                                .expect("Could not read from dir")
+                                .path();
+                            let req_file = req_file.to_str().unwrap();
+                            let file: Vec<&str> = req_file
+                                .split("/")
+                                .collect();
+                            let file = file.last().unwrap();
+                            println!("{:?}", file);
+                        }
                     },
                     "disc" => {
                         Server::discovery(y.clone(), &data, 16, amt);
@@ -242,7 +257,6 @@ impl Server {
             src_ip
         }
     }
-
 }
 
 fn copy_str(buf: &mut [u8], current: u16, string: &str) {
@@ -259,7 +273,7 @@ fn copy_u16(buf: &mut [u8], current: u16, num: u16) {
 }
 
 fn copy_ip(buf: &mut [u8], current: u16, ip: &str) {
-    let ip: Vec<&str>= ip.split(".").collect();
+    let ip: Vec<&str> = ip.split(".").collect();
     for (i, num) in ip.iter().enumerate() {
         buf[current as usize + i] = num.parse::<u8>().expect("Wrong ip");
     }
