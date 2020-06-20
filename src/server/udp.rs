@@ -125,14 +125,10 @@ impl Server {
                             let resph = Header::new("OK", header.src_port,
                                 header.dest_port, 
                                 &header.src_ip, &header.dest_ip);
-                            let mut current =
-                                Server::copy_header(&mut buf, &resph);
-                            copy_u16(&mut buf, current, req_file_len);
-                            current += 2;
-                            copy_str(&mut buf, current, req_file);
-                            current += req_file_len;
+                            let current = Server::create_file_packet(&mut buf,
+                                &resph, req_file);
                             Server::send(&soc3, &header.src_ip,
-                                header.src_port, buf, current as usize);
+                                header.src_port, buf, current);
                         }
                     },
                     "disc" => {
