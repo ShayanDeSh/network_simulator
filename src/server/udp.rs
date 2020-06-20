@@ -6,6 +6,7 @@ use std::thread;
 use std::mem;
 use std::time::Duration;
 use std::fs;
+use std::net::TcpListener;
 
 const BUFFER_SIZE: usize = 2048;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
@@ -115,21 +116,8 @@ impl Server {
                 println!("recived {:?}", request);
                 match request {
                     "get" => {
-                        let req_file_len = extract_u16(&data, current);
-                        current += 2;
-                        let req_file = extract_str(&data,
-                            current, current + req_file_len as usize);
-                        current += req_file_len as usize;
-                        if Server::find_file(req_file, &dir) {
-                            let mut buf: [u8; BUFFER_SIZE] = [0; 2048];
-                            let resph = Header::new("OK", header.src_port,
-                                header.dest_port, 
-                                &header.src_ip, &header.dest_ip);
-                            let current = Server::create_file_packet(&mut buf,
-                                &resph, req_file);
-                            Server::send(&soc3, &header.src_ip,
-                                header.src_port, buf, current);
-                        }
+                        Server::process_get(&data, current,
+                            &header, &dir, &soc3);
                     },
                     "disc" => {
                         Server::discovery(y.clone(), &data, 16, amt);
@@ -302,6 +290,33 @@ impl Server {
         }
         return false;
     }
+
+    fn process_get(data: &[u8], current: usize, header: &Header, dir: &str,
+        socket: &UdpSocket) {
+        let mut current = current;
+        let req_file_len = extract_u16(&data, current);
+        current += 2;
+        let req_file = extract_str(&data,
+            current, current + req_file_len as usize);
+        if Server::find_file(req_file, &dir) {
+            let mut buf: [u8; BUFFER_SIZE] = [0; 2048];
+            let resph = Header::new("OK", header.src_port,
+                header.dest_port, 
+                &header.src_ip, &header.dest_ip);
+            let mut current 
+                = Server::create_file_packet(&mut buf,
+                &resph, req_file);
+            let addr = format!("{}:{}", resph.src_ip, 0);
+            let listener = TcpListener::bind(addr).unwrap();
+            let socket_addr = listener.local_addr().unwrap();
+            let port = socket_addr.port();
+            copy_u16(&mut buf, current as u16, port);
+            current += 2;
+            Server::send(&socket, &header.src_ip,
+                header.src_port, buf, current);
+        }
+    }
+
 }
 
 fn copy_str(buf: &mut [u8], current: u16, string: &str) {
