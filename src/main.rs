@@ -73,5 +73,5 @@ fn main() {
     println!("{:?}", port);
     println!("{:?}", location);
     println!("{:?}", dir_location);
-    server::start(port, location);
+    server::start(port, location, dir_location);
 }

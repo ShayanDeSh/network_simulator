@@ -6,7 +6,7 @@ use std::io;
 
 mod udp;
 
-pub fn start(port: String, location: String) {
+pub fn start(port: String, location: String, dir: String) {
     let table: HashMap<String, String> = HashMap::new();
     let rtable = Mutex::new(table);
     let hosts: Arc<RwLock<HashMap<String, udp::Host>>> = 
@@ -19,7 +19,7 @@ pub fn start(port: String, location: String) {
         hosts.clone(), "127.0.0.1");
     let socket = connection.socket.try_clone()
     .expect("Could not clone socket");
-    thread::spawn(move || {
+        thread::spawn(move || {
         loop {
             let mut input = String::new();
             io::stdin().read_line(&mut input)
@@ -31,7 +31,6 @@ pub fn start(port: String, location: String) {
                     print_hosts(&hosts);
                 },
                 "get" => {
-                    println!("here");
                     let mut input = String::new();
                     io::stdin().read_line(&mut input)
                         .expect("Something Went wrong on reading from input");
@@ -45,7 +44,7 @@ pub fn start(port: String, location: String) {
             }
         }
     });
-    let (process_handler, listen_handler) = connection.listen();
+    let (process_handler, listen_handler) = connection.listen(dir);
     process_handler.join().unwrap();
     listen_handler.join().unwrap();
 }
