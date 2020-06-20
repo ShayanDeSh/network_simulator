@@ -8,7 +8,7 @@ use std::thread;
 use std::mem;
 use std::time::Duration;
 use std::fs;
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 
 const BUFFER_SIZE: usize = 2048;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
@@ -132,13 +132,16 @@ impl Server {
                         current += file_len;
                         let tcp_port = extract_u16(&data, current);
                         let mut buf: [u8; 2048] = [0; 2048];
-                        let req_header = Header::new("star",
-                            header.src_port, header.dest_port,
-                            &header.src_ip, &header.dest_ip);
-                        current = Server::create_file_packet(&mut buf,
-                            &req_header, file); 
-                        Server::send(&soc3, &req_header.dest_ip,
-                            req_header.dest_port, buf, current);
+                        let addr = format!("{}:{}", header.src_ip, tcp_port);
+                        let mut tcp_connection =
+                            TcpStream::connect(addr).unwrap();
+                        let mut f = fs::File::create(file).unwrap();
+                        thread::spawn(move || {
+                            while tcp_connection.read(&mut buf).unwrap() != 0 {
+                                f.write(&mut buf)
+                                    .expect("Could not write file");
+                            }
+                        });
                     },
                     "star" => {
                         println!("START");
@@ -202,6 +205,9 @@ impl Server {
         src_port: u16, src_ip: &str) {
         let hosts = hosts.read().unwrap();
         for (_, host) in hosts.iter() {
+            if host.ipaddr == src_ip && host.port == src_port {
+                continue;
+            }
             let mut buf: [u8; 2048] = [0; 2048];
             let header = Header::new("get", host.port, src_port,
                 &host.ipaddr, src_ip);
