@@ -135,7 +135,8 @@ impl Server {
                         let addr = format!("{}:{}", header.src_ip, tcp_port);
                         let mut tcp_connection =
                             TcpStream::connect(addr).unwrap();
-                        let mut f = fs::File::create(file).unwrap();
+                        let location = format!("./{}/{}", dir, file);
+                        let mut f = fs::File::create(location).unwrap();
                         thread::spawn(move || {
                             while tcp_connection.read(&mut buf).unwrap() != 0 {
                                 f.write(&mut buf)
@@ -318,11 +319,13 @@ impl Server {
             let socket_addr = listener.local_addr().unwrap();
             let port = socket_addr.port();
             let file = req_file.to_string();
+            let directory = dir.to_string();
             thread::spawn(move || {
                 match listener.accept() {
                     Ok((mut socket, addr)) => {
                         let mut buffer: [u8; 2048] = [0; 2048];
-                        let mut f = fs::File::open(file)
+                        let location = format!("./{}/{}", directory, file);
+                        let mut f = fs::File::open(location)
                             .expect("Could not open file");
                         while f.read(&mut buffer).unwrap() != 0 {
                             socket.write(&buffer).unwrap();
