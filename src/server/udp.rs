@@ -84,6 +84,7 @@ impl Server {
         -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
         let soc = self.socket.try_clone().expect("Could not clone");
         let soc2 = self.socket.try_clone().expect("Could not clone");
+        let soc3 = self.socket.try_clone().expect("Could not clone");
         let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
         mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
         let x = self.hosts.clone();
@@ -109,26 +110,36 @@ impl Server {
             loop {
                 let (amt, data) = rx.recv().unwrap();
                 let header = Server::extract_header(&data);
+                let mut current = 16;
                 let request:&str = &header.request.replace("\u{0}", "");
                 println!("recived {:?}", request);
                 match request {
                     "get" => {
-                        let files = fs::read_dir(&dir)
-                            .expect("could not read dir");
-                        for file in files {
-                            let req_file = file
-                                .expect("Could not read from dir")
-                                .path();
-                            let req_file = req_file.to_str().unwrap();
-                            let file: Vec<&str> = req_file
-                                .split("/")
-                                .collect();
-                            let file = file.last().unwrap();
-                            println!("{:?}", file);
+                        let req_file_len = extract_u16(&data, current);
+                        current += 2;
+                        let req_file = extract_str(&data,
+                            current, current + req_file_len as usize);
+                        current += req_file_len as usize;
+                        if Server::find_file(req_file, &dir) {
+                            let mut buf: [u8; BUFFER_SIZE] = [0; 2048];
+                            let resph = Header::new("OK", header.src_port,
+                                header.dest_port, 
+                                &header.src_ip, &header.dest_ip);
+                            let mut current =
+                                Server::copy_header(&mut buf, &resph);
+                            copy_u16(&mut buf, current, req_file_len);
+                            current += 2;
+                            copy_str(&mut buf, current, req_file);
+                            current += req_file_len;
+                            Server::send(&soc3, &header.src_ip,
+                                header.src_port, buf, current as usize);
                         }
                     },
                     "disc" => {
                         Server::discovery(y.clone(), &data, 16, amt);
+                    },
+                    "OK" => {
+                        println!("ok ok");
                     },
                     _ => {
                         continue;
@@ -256,6 +267,25 @@ impl Server {
             dest_ip,
             src_ip
         }
+    }
+
+    fn find_file(req: &str, dir: &str) -> bool {
+        let files = fs::read_dir(&dir)
+            .expect("could not read dir");
+        for file in files {
+            let req_file = file
+                .expect("Could not read from dir")
+                .path();
+            let req_file = req_file.to_str().unwrap();
+            let file: Vec<&str> = req_file
+                .split("/")
+                .collect();
+            let file = file.last().unwrap();
+            if *file == req {
+                return true;
+            }
+        }
+        return false;
     }
 }
 
