@@ -146,10 +146,13 @@ impl Server {
                         let req_header = Header::new("star",
                             header.src_port, header.dest_port,
                             &header.src_ip, &header.dest_ip);
-                        Server::create_file_packet(&mut buf,
+                        current = Server::create_file_packet(&mut buf,
                             &req_header, file); 
+                        Server::send(&soc3, &req_header.dest_ip,
+                            req_header.dest_port, buf, current); 
                     },
                     "star" => {
+                        println!("START");
                     },
                     _ => {
                         continue;
