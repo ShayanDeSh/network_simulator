@@ -1,4 +1,6 @@
 use std::net::UdpSocket;
+use std::io;
+use std::io::prelude::*;
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::{Mutex, Arc, RwLock};
@@ -124,8 +126,11 @@ impl Server {
                     },
                     "OK" => {
                         let file_len = extract_u16(&data, current) as usize;
+                        current += 2;
                         let file = extract_str(&data, current,
                             current + file_len);
+                        current += file_len;
+                        let tcp_port = extract_u16(&data, current);
                         let mut buf: [u8; 2048] = [0; 2048];
                         let req_header = Header::new("star",
                             header.src_port, header.dest_port,
@@ -133,7 +138,7 @@ impl Server {
                         current = Server::create_file_packet(&mut buf,
                             &req_header, file); 
                         Server::send(&soc3, &req_header.dest_ip,
-                            req_header.dest_port, buf, current); 
+                            req_header.dest_port, buf, current);
                     },
                     "star" => {
                         println!("START");
@@ -308,8 +313,23 @@ impl Server {
                 &resph, req_file);
             let addr = format!("{}:{}", resph.src_ip, 0);
             let listener = TcpListener::bind(addr).unwrap();
+            let l = listener.try_clone();
             let socket_addr = listener.local_addr().unwrap();
             let port = socket_addr.port();
+            let file = req_file.to_string();
+            thread::spawn(move || {
+                match listener.accept() {
+                    Ok((mut socket, addr)) => {
+                        let mut buffer: [u8; 2048] = [0; 2048];
+                        let mut f = fs::File::open(file)
+                            .expect("Could not open file");
+                        while f.read(&mut buffer).unwrap() != 0 {
+                            socket.write(&buffer).unwrap();
+                        }
+                    },
+                    Err(e) => println!("couldn't get client: {:?}", e)
+                }
+            });
             copy_u16(&mut buf, current as u16, port);
             current += 2;
             Server::send(&socket, &header.src_ip,
