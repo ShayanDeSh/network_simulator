@@ -159,9 +159,6 @@ impl Server {
                             }
                         });
                     },
-                    "star" => {
-                        println!("START");
-                    },
                     _ => {
                         continue;
                     }
