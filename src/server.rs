@@ -11,15 +11,18 @@ pub fn start(port: String, location: String, dir: String) {
     let rtable = Mutex::new(table);
     let hosts: Arc<RwLock<HashMap<String, udp::Host>>> = 
         Arc::new(RwLock::new(HashMap::new()));
+    let requests: Arc<RwLock<Vec<String>>> = 
+        Arc::new(RwLock::new(Vec::new()));
     if !location.is_empty() {
         read_hosts(hosts.clone(), &location);
     }
     let list_clone =  hosts.clone();
     let connection = udp::Server::init(&port, rtable,
-        hosts.clone(), "127.0.0.1");
+        hosts.clone(), "127.0.0.1", requests.clone());
     let socket = connection.socket.try_clone()
     .expect("Could not clone socket");
-        thread::spawn(move || {
+    let _requests = requests.clone();
+    thread::spawn(move || {
         loop {
             let mut input = String::new();
             io::stdin().read_line(&mut input)
@@ -36,7 +39,7 @@ pub fn start(port: String, location: String, dir: String) {
                         .expect("Something Went wrong on reading from input");
                     input = input.trim().to_string();
                     udp::Server::get(&socket, &input, hosts.clone(), 
-                        port.parse::<u16>().unwrap(), "127.0.0.1"); 
+                        port.parse::<u16>().unwrap(), "127.0.0.1", requests.clone()); 
                 }, 
                 _ => {
                     continue;

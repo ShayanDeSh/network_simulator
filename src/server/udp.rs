@@ -10,6 +10,7 @@ use std::time::Duration;
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 
+
 const BUFFER_SIZE: usize = 2048;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
 
@@ -22,6 +23,7 @@ pub struct Host {
 pub struct Server {
     pub socket: UdpSocket,
     pub hosts: Arc<RwLock<HashMap<String, Host>>> ,
+    pub requests: Arc<RwLock<Vec<String>>> ,
     rtable: Mutex<HashMap<String, String>>,
     pub udp_port: u16,
     pub ipaddr: String
@@ -67,7 +69,8 @@ impl Server {
         udp_port: &str,
         rtable: Mutex<HashMap<String, String>>,
         hosts: Arc<RwLock<HashMap<String, Host>>>,
-        ipaddr: &str
+        ipaddr: &str,
+        requests: Arc<RwLock<Vec<String>>>,
         ) -> Server {
         let socket  = UdpSocket::bind(format!("127.0.0.1:{}", udp_port))
             .expect("Something went
@@ -77,6 +80,7 @@ impl Server {
         Server {
             socket,
             hosts,
+            requests,
             rtable,
             udp_port,
             ipaddr
@@ -109,6 +113,7 @@ impl Server {
                 }
             }
         });
+        let requests = self.requests.clone();
         let process_handler = thread::spawn(move || {
             loop {
                 let (amt, data) = rx.recv().unwrap();
@@ -130,6 +135,16 @@ impl Server {
                         let file = extract_str(&data, current,
                             current + file_len);
                         current += file_len;
+                        let mut requests = requests.write().unwrap();
+                        let index = requests.iter().position(|x| *x == file);
+                        match index {
+                            Some(index) => {
+                                requests.remove(index);
+                                println!("Could not find");
+                            },
+                            None => {
+                            }
+                        };
                         let tcp_port = extract_u16(&data, current);
                         let mut buf: [u8; 2048] = [0; 2048];
                         let addr = format!("{}:{}", header.src_ip, tcp_port);
@@ -198,7 +213,10 @@ impl Server {
 
     pub fn get(socket: &UdpSocket, path: &str,
         hosts: Arc<RwLock<HashMap<String, Host>>>,
-        src_port: u16, src_ip: &str) {
+        src_port: u16, src_ip: &str, requests: Arc<RwLock<Vec<String>>>) {
+        let mut _requests = requests.write().unwrap();
+        _requests.push(path.to_string());
+        let clear_request = requests.clone();
         let hosts = hosts.read().unwrap();
         for (_, host) in hosts.iter() {
             if host.ipaddr == src_ip && host.port == src_port {
@@ -212,6 +230,20 @@ impl Server {
                 host.port, buf, current as usize);
             println!("sending");
         }
+        let path = path.to_string();
+        let _ = thread::spawn(move || {
+            thread::sleep(Duration::from_secs(10));
+            let mut req = clear_request.write().unwrap();
+            let index = req.iter().position(|x| *x == path);
+            match index {
+                Some(index) => {
+                    req.remove(index);
+                    println!("Could not find");
+                },
+                None => {
+                }
+            };
+        });
     }
 
     pub fn send_discovery(socket: &UdpSocket,
