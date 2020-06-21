@@ -11,7 +11,7 @@ use std::fs;
 use std::net::{TcpListener, TcpStream};
 
 
-const BUFFER_SIZE: usize = 2048;
+const BUFFER_SIZE: usize = 8192;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
 
 pub struct Host {
@@ -146,7 +146,7 @@ impl Server {
                             }
                         };
                         let tcp_port = extract_u16(&data, current);
-                        let mut buf: [u8; 2048] = [0; 2048];
+                        let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
                         let addr = format!("{}:{}", header.src_ip, tcp_port);
                         let mut tcp_connection =
                             TcpStream::connect(addr).unwrap();
@@ -222,7 +222,7 @@ impl Server {
             if host.ipaddr == src_ip && host.port == src_port {
                 continue;
             }
-            let mut buf: [u8; 2048] = [0; 2048];
+            let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
             let header = Header::new("get", host.port, src_port,
                 &host.ipaddr, src_ip);
             let current = Server::create_file_packet(&mut buf, &header, path);
@@ -338,7 +338,7 @@ impl Server {
         let req_file = extract_str(&data,
             current, current + req_file_len as usize);
         if Server::find_file(req_file, &dir) {
-            let mut buf: [u8; BUFFER_SIZE] = [0; 2048];
+            let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
             let resph = Header::new("OK", header.src_port,
                 header.dest_port, 
                 &header.src_ip, &header.dest_ip);
@@ -355,7 +355,7 @@ impl Server {
             thread::spawn(move || {
                 match listener.accept() {
                     Ok((mut socket, addr)) => {
-                        let mut buffer: [u8; 2048] = [0; 2048];
+                        let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
                         let location = format!("./{}/{}", directory, file);
                         let mut f = fs::File::open(location)
                             .expect("Could not open file");
