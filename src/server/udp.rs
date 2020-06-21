@@ -22,11 +22,12 @@ pub struct Host {
 
 pub struct Server {
     pub socket: UdpSocket,
-    pub hosts: Arc<RwLock<HashMap<String, Host>>> ,
-    pub requests: Arc<RwLock<Vec<String>>> ,
+    pub hosts: Arc<RwLock<HashMap<String, Host>>>,
+    pub requests: Arc<RwLock<Vec<String>>>,
     rtable: Mutex<HashMap<String, String>>,
     pub udp_port: u16,
-    pub ipaddr: String
+    pub ipaddr: String,
+    pub connection_num: Arc<RwLock<u16>>,
 }
 
 pub struct Header {
@@ -77,13 +78,15 @@ impl Server {
                 wrong while trying to create UDP socket!!");
         let udp_port = udp_port.parse::<u16>().expect("non parsable port");
         let ipaddr = ipaddr.to_string();
+        let connection_num = Arc::new(RwLock::new(0));
         Server {
             socket,
             hosts,
             requests,
             rtable,
             udp_port,
-            ipaddr
+            ipaddr,
+            connection_num
         }
     }
 
@@ -114,6 +117,7 @@ impl Server {
             }
         });
         let requests = self.requests.clone();
+        let connection_num = self.connection_num.clone();
         let process_handler = thread::spawn(move || {
             loop {
                 let (amt, data) = rx.recv().unwrap();
@@ -124,7 +128,7 @@ impl Server {
                 match request {
                     "get" => {
                         Server::process_get(&data, current,
-                            &header, &dir, &soc3);
+                            &header, &dir, &soc3, connection_num.clone());
                     },
                     "disc" => {
                         Server::discovery(y.clone(), &data, 16, amt);
@@ -328,7 +332,7 @@ impl Server {
     }
 
     fn process_get(data: &[u8], current: usize, header: &Header, dir: &str,
-        socket: &UdpSocket) {
+        socket: &UdpSocket, connection_num: Arc<RwLock<u16>>) {
         let mut current = current;
         let req_file_len = extract_u16(&data, current);
         current += 2;
@@ -349,6 +353,13 @@ impl Server {
             let port = socket_addr.port();
             let file = req_file.to_string();
             let directory = dir.to_string();
+            {
+                let mut num = connection_num.write().unwrap();
+                if *num > 20  {
+                    return;
+                }
+                *num += 1;
+            }
             thread::spawn(move || {
                 match listener.accept() {
                     Ok((mut socket, addr)) => {
@@ -362,6 +373,8 @@ impl Server {
                     },
                     Err(e) => println!("couldn't get client: {:?}", e)
                 }
+                let mut num = connection_num.write().unwrap();
+                *num -= 1;
             });
             copy_u16(&mut buf, current as u16, port);
             current += 2;
