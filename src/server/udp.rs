@@ -140,9 +140,9 @@ impl Server {
                         match index {
                             Some(index) => {
                                 requests.remove(index);
-                                println!("Could not find");
                             },
                             None => {
+                                continue;
                             }
                         };
                         let tcp_port = extract_u16(&data, current);
@@ -339,6 +339,7 @@ impl Server {
             current, current + req_file_len as usize);
         if Server::find_file(req_file, &dir) {
             let mut buf: [u8; BUFFER_SIZE] = [0; 2048];
+            thread::sleep(Duration::from_secs(11));
             let resph = Header::new("OK", header.src_port,
                 header.dest_port, 
                 &header.src_ip, &header.dest_ip);
