@@ -13,6 +13,7 @@ use std::net::{TcpListener, TcpStream};
 
 const BUFFER_SIZE: usize = 8192;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
+const MAX_CONEECTION: u16 = 20;
 
 pub struct Host {
     pub name: String,
@@ -355,7 +356,7 @@ impl Server {
             let directory = dir.to_string();
             {
                 let mut num = connection_num.write().unwrap();
-                if *num > 20  {
+                if *num > MAX_CONEECTION  {
                     return;
                 }
                 *num += 1;
