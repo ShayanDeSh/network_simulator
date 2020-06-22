@@ -159,7 +159,10 @@ impl Server {
                             }
                         };
                         let tcp_port = extract_u16(&data, current);
-                        let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+                        current += 2;
+                        let buffer_size = extract_u16(&data, current);
+                        println!("buffer_size is: {}", buffer_size);
+                        let mut buf  = vec![0 as u8; buffer_size as usize];
                         let addr = format!("{}:{}", header.src_ip, tcp_port);
                         let mut tcp_connection =
                             TcpStream::connect(addr).unwrap();
@@ -347,6 +350,7 @@ impl Server {
         socket: &UdpSocket, connection_num: Arc<RwLock<u16>>, 
         hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>) {
         let mut current = current;
+        let num_requests: u16;
         {
             let key = format!("{}:{}", header.src_ip, header.src_port);
             let hosts = hosts.write().unwrap();
@@ -354,6 +358,7 @@ impl Server {
                 Some(host) => {
                     let mut host = host.write().unwrap();
                     host.num_requests += 1;
+                    num_requests = host.num_requests;
                 },
                 None => {
                     return;
@@ -378,19 +383,22 @@ impl Server {
             let port = socket_addr.port();
             let file = req_file.to_string();
             let directory = dir.to_string();
+            let buffer_size: u16; 
             {
                 let mut num = connection_num.write().unwrap();
                 if *num > MAX_CONEECTION  {
                     return;
                 }
                 *num += 1;
+                buffer_size = Server::calculate_buffer(*num, num_requests);
             }
             thread::spawn(move || {
                 match listener.accept() {
                     Ok((mut socket, _addr)) => {
                         socket.set_nodelay(true)
                             .expect("Could not set no delay");
-                        let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+                        let mut buffer 
+                            = vec![0 as u8; 2048];
                         let location = format!("./{}/{}", directory, file);
                         let mut f = fs::File::open(location)
                             .expect("Could not open file");
@@ -404,6 +412,8 @@ impl Server {
                 *num -= 1;
             });
             copy_u16(&mut buf, current as u16, port);
+            current += 2;
+            copy_u16(&mut buf, current as u16, buffer_size);
             current += 2;
             Server::send(&socket, &header.src_ip,
                 header.src_port, buf, current);
