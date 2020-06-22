@@ -26,7 +26,6 @@ pub struct Server {
     pub socket: UdpSocket,
     pub hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
     pub requests: Arc<RwLock<Vec<String>>>,
-    rtable: Mutex<HashMap<String, String>>,
     pub udp_port: u16,
     pub ipaddr: String,
     pub connection_num: Arc<RwLock<u16>>,
@@ -73,7 +72,6 @@ impl Host {
 impl Server {
     pub fn init(
         udp_port: &str,
-        rtable: Mutex<HashMap<String, String>>,
         hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
         ipaddr: &str,
         requests: Arc<RwLock<Vec<String>>>,
@@ -88,7 +86,6 @@ impl Server {
             socket,
             hosts,
             requests,
-            rtable,
             udp_port,
             ipaddr,
             connection_num

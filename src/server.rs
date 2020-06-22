@@ -7,8 +7,6 @@ use std::io;
 mod udp;
 
 pub fn start(port: String, location: String, dir: String) {
-    let table: HashMap<String, String> = HashMap::new();
-    let rtable = Mutex::new(table);
     let hosts: Arc<RwLock<HashMap<String, RwLock<udp::Host>>>> = 
         Arc::new(RwLock::new(HashMap::new()));
     let requests: Arc<RwLock<Vec<String>>> = 
@@ -17,7 +15,7 @@ pub fn start(port: String, location: String, dir: String) {
         read_hosts(hosts.clone(), &location);
     }
     let list_clone =  hosts.clone();
-    let connection = udp::Server::init(&port, rtable,
+    let connection = udp::Server::init(&port,
         hosts.clone(), "127.0.0.1", requests.clone());
     let socket = connection.socket.try_clone()
     .expect("Could not clone socket");
