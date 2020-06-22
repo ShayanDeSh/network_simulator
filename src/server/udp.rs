@@ -1,9 +1,8 @@
 use std::net::UdpSocket;
-use std::io;
 use std::io::prelude::*;
 use std::collections::HashMap;
 use std::sync::mpsc;
-use std::sync::{Mutex, Arc, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::mem;
 use std::time::Duration;
@@ -100,7 +99,6 @@ impl Server {
         let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
         mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
         let discover_handler_hosts = self.hosts.clone();
-        let z = self.hosts.clone();
         let process_handler_hosts = self.hosts.clone();
         let myaddr = self.ipaddr.clone();
         let udp_p: u16 = self.udp_port.clone();
