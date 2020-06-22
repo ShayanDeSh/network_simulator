@@ -91,21 +91,18 @@ impl Server {
         }
     }
 
-    pub fn listen(self, dir: String)
-        -> (thread::JoinHandle<u32>,
-            thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
-        let listen_handler_soc = self.socket.try_clone()
-            .expect("Could not clone");
-        let discover_handler_soc = self.socket.try_clone()
-            .expect("Could not clone");
-        let process_handler_soc3 = self.socket.try_clone()
-            .expect("Could not clone");
-        let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
-        mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
-        let discover_handler_hosts = self.hosts.clone();
-        let process_handler_hosts = self.hosts.clone();
+    pub fn listen(self, dir: String) -> (thread::JoinHandle<u32>,
+            thread::JoinHandle<u32>,
+            thread::JoinHandle<u32>) {
+
         let myaddr = self.ipaddr.clone();
         let udp_p: u16 = self.udp_port.clone();
+        let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
+        mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
+
+        let discover_handler_hosts = self.hosts.clone();
+        let discover_handler_soc = self.socket.try_clone()
+            .expect("Could not clone");
         let discover_handler = thread::spawn(move || {
             loop {
                 thread::sleep(Duration::from_secs(10));
@@ -116,19 +113,23 @@ impl Server {
                     );
             }
         });
+
         let requests = self.requests.clone();
         let connection_num = self.connection_num.clone();
+        let process_handler_hosts = self.hosts.clone();
+        let process_handler_soc = self.socket.try_clone()
+            .expect("Could not clone");
         let process_handler = thread::spawn(move || {
             loop {
                 let (amt, data) = rx.recv().unwrap();
                 let header = Server::extract_header(&data);
-                let mut current = 16;
+                let current = 16;
                 let request:&str = &header.request.replace("\u{0}", "");
                 println!("recived {:?}", request);
                 match request {
                     "get" => {
                         Server::process_get(&data, current,
-                            &header, &dir, &process_handler_soc3,
+                            &header, &dir, &process_handler_soc,
                             connection_num.clone(), 
                             process_handler_hosts.clone());
                     },
@@ -137,40 +138,8 @@ impl Server {
                         &data, 16, amt);
                     },
                     "OK" => {
-                        let file_len = bytes::extract::extract_u16(&data,
-                            current) as usize;
-                        current += 2;
-                        let file = bytes::extract::extract_str(&data, current,
-                            current + file_len);
-                        current += file_len;
-                        let mut requests = requests.write().unwrap();
-                        let index = requests.iter().position(|x| *x == file);
-                        match index {
-                            Some(index) => {
-                                requests.remove(index);
-                            },
-                            None => {
-                                continue;
-                            }
-                        };
-                        let tcp_port = bytes::extract::extract_u16(&data,
-                            current);
-                        current += 2;
-                        let buffer_size = bytes::extract::extract_u16(&data,
-                            current);
-                        println!("buffer_size is: {}", buffer_size);
-                        let mut buf  = vec![0 as u8; buffer_size as usize];
-                        let addr = format!("{}:{}", header.src_ip, tcp_port);
-                        let mut tcp_connection =
-                            TcpStream::connect(addr).unwrap();
-                        let location = format!("./{}/{}", dir, file);
-                        let mut f = fs::File::create(location).unwrap();
-                        thread::spawn(move || {
-                            while tcp_connection.read(&mut buf).unwrap() != 0 {
-                                f.write(&mut buf)
-                                    .expect("Could not write file");
-                            }
-                        });
+                        Server::process_ok(current, data, requests.clone(),
+                            header, &dir);
                     },
                     _ => {
                         continue;
@@ -178,6 +147,9 @@ impl Server {
                 }
             }
         });
+
+        let listen_handler_soc = self.socket.try_clone()
+            .expect("Could not clone");
         let listen_handler = thread::spawn(move || {
             loop {
                 let mut buf = [32; BUFFER_SIZE];
@@ -259,7 +231,8 @@ impl Server {
     }
 
     pub fn send_discovery(socket: &UdpSocket,
-        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>, header: Header) {
+        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
+        header: Header) {
         let mut counter = 0;
         let mut flag = true;
         let hosts = hosts.read().unwrap();
@@ -343,6 +316,48 @@ impl Server {
             }
         }
         return false;
+    }
+
+    fn process_ok(current: usize,
+        data: [u8; BUFFER_SIZE],
+        requests: Arc<RwLock<Vec<String>>>,
+        header: Header,
+        dir: &str) {
+        let mut current = current;
+        let file_len = bytes::extract::extract_u16(&data,
+            current) as usize;
+        current += 2;
+        let file = bytes::extract::extract_str(&data, current,
+            current + file_len);
+        current += file_len;
+        let mut requests = requests.write().unwrap();
+        let index = requests.iter().position(|x| *x == file);
+        match index {
+            Some(index) => {
+                requests.remove(index);
+            },
+            None => {
+                return;
+            }
+        };
+        let tcp_port = bytes::extract::extract_u16(&data,
+            current);
+        current += 2;
+        let buffer_size = bytes::extract::extract_u16(&data,
+            current);
+        println!("buffer_size is: {}", buffer_size);
+        let mut buf  = vec![0 as u8; buffer_size as usize];
+        let addr = format!("{}:{}", header.src_ip, tcp_port);
+        let mut tcp_connection =
+            TcpStream::connect(addr).unwrap();
+        let location = format!("./{}/{}", dir, file);
+        let mut f = fs::File::create(location).unwrap();
+        thread::spawn(move || {
+            while tcp_connection.read(&mut buf).unwrap() != 0 {
+                f.write(&mut buf)
+                    .expect("Could not write file");
+            }
+        });
     }
 
     fn process_get(data: &[u8], current: usize, header: &Header, dir: &str,
