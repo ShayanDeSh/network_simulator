@@ -92,30 +92,28 @@ impl Server {
     }
 
     pub fn listen(self, dir: String)
-        -> (thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
-        let soc = self.socket.try_clone().expect("Could not clone");
-        let soc2 = self.socket.try_clone().expect("Could not clone");
-        let soc3 = self.socket.try_clone().expect("Could not clone");
+        -> (thread::JoinHandle<u32>,
+            thread::JoinHandle<u32>, thread::JoinHandle<u32>) {
+        let listen_handler_soc = self.socket.try_clone()
+            .expect("Could not clone");
+        let discover_handler_soc = self.socket.try_clone()
+            .expect("Could not clone");
+        let process_handler_soc3 = self.socket.try_clone()
+            .expect("Could not clone");
         let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
         mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
         let discover_handler_hosts = self.hosts.clone();
         let process_handler_hosts = self.hosts.clone();
         let myaddr = self.ipaddr.clone();
         let udp_p: u16 = self.udp_port.clone();
-        let _discover_handler = thread::spawn(move || {
+        let discover_handler = thread::spawn(move || {
             loop {
                 thread::sleep(Duration::from_secs(10));
-                let hosts = discover_handler_hosts.read().unwrap();
-                for (_, host) in hosts.iter() {
-                    let host = host.read().unwrap();
-                    if host.ipaddr == myaddr && host.port == udp_p {
-                        continue
-                    }
-                    let header = Header::new("disc",
-                        host.port, udp_p, &host.ipaddr, &myaddr);
-                    Server::send_discovery(&soc2,
-                        discover_handler_hosts.clone(), header);
-                }
+                Server::start_discovery(
+                    discover_handler_hosts.clone(),
+                    &myaddr, udp_p,
+                    discover_handler_soc.try_clone().unwrap()
+                    );
             }
         });
         let requests = self.requests.clone();
@@ -130,7 +128,8 @@ impl Server {
                 match request {
                     "get" => {
                         Server::process_get(&data, current,
-                            &header, &dir, &soc3, connection_num.clone(), 
+                            &header, &dir, &process_handler_soc3,
+                            connection_num.clone(), 
                             process_handler_hosts.clone());
                     },
                     "disc" => {
@@ -182,12 +181,12 @@ impl Server {
         let listen_handler = thread::spawn(move || {
             loop {
                 let mut buf = [32; BUFFER_SIZE];
-                let (amt, _src) = soc.recv_from(&mut buf)
+                let (amt, _src) = listen_handler_soc.recv_from(&mut buf)
                     .expect("shit happened");
                 tx.send((amt, buf)).unwrap();
             }
         });
-        return (process_handler, listen_handler);
+        return (process_handler, listen_handler, discover_handler);
     }
 
     fn discovery(hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
@@ -417,6 +416,20 @@ impl Server {
             current += 2;
             Server::send(&socket, &header.src_ip,
                 header.src_port, buf, current);
+        }
+    }
+
+    fn start_discovery(hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>, 
+        myaddr: &str, udp_p: u16, socket: UdpSocket) {
+        let _hosts = hosts.read().unwrap();
+        for (_, host) in _hosts.iter() {
+            let host = host.read().unwrap();
+            if host.ipaddr == myaddr && host.port == udp_p {
+                continue
+            }
+            let header = Header::new("disc",
+                host.port, udp_p, &host.ipaddr, &myaddr);
+            Server::send_discovery(&socket, hosts.clone(), header);
         }
     }
 

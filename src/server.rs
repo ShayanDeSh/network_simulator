@@ -37,7 +37,8 @@ pub fn start(port: String, location: String, dir: String) {
                         .expect("Something Went wrong on reading from input");
                     input = input.trim().to_string();
                     udp::Server::get(&socket, &input, hosts.clone(), 
-                        port.parse::<u16>().unwrap(), "127.0.0.1", requests.clone()); 
+                        port.parse::<u16>().unwrap(),
+                        "127.0.0.1", requests.clone()); 
                 }, 
                 _ => {
                     continue;
@@ -45,9 +46,11 @@ pub fn start(port: String, location: String, dir: String) {
             }
         }
     });
-    let (process_handler, listen_handler) = connection.listen(dir);
+    let (process_handler, listen_handler, discover_handler) 
+        = connection.listen(dir);
     process_handler.join().unwrap();
     listen_handler.join().unwrap();
+    discover_handler.join().unwrap();
 }
 
 fn print_hosts(hosts: &HashMap<String, RwLock<udp::Host>>) {
