@@ -4,6 +4,7 @@ use getopts::Options;
 use std::path::Path;
 
 mod server;
+mod bytes;
 
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options]", program);

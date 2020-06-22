@@ -9,7 +9,7 @@ use std::mem;
 use std::time::Duration;
 use std::fs;
 use std::net::{TcpListener, TcpStream};
-
+use crate::bytes;
 
 const BUFFER_SIZE: usize = 8192;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
@@ -140,9 +140,10 @@ impl Server {
                         &data, 16, amt);
                     },
                     "OK" => {
-                        let file_len = extract_u16(&data, current) as usize;
+                        let file_len = bytes::extract::extract_u16(&data,
+                            current) as usize;
                         current += 2;
-                        let file = extract_str(&data, current,
+                        let file = bytes::extract::extract_str(&data, current,
                             current + file_len);
                         current += file_len;
                         let mut requests = requests.write().unwrap();
@@ -155,9 +156,11 @@ impl Server {
                                 continue;
                             }
                         };
-                        let tcp_port = extract_u16(&data, current);
+                        let tcp_port = bytes::extract::extract_u16(&data,
+                            current);
                         current += 2;
-                        let buffer_size = extract_u16(&data, current);
+                        let buffer_size = bytes::extract::extract_u16(&data,
+                            current);
                         println!("buffer_size is: {}", buffer_size);
                         let mut buf  = vec![0 as u8; buffer_size as usize];
                         let addr = format!("{}:{}", header.src_ip, tcp_port);
@@ -196,11 +199,12 @@ impl Server {
         while current < end { 
             let name_len = data[current];
             current += 1;
-            let name = extract_str(data, current, current + name_len as usize);
+            let name = bytes::extract::extract_str(data,
+                current, current + name_len as usize);
             current += name_len as usize;
-            let ipaddr = extract_ip(data, current);
+            let ipaddr = bytes::extract::extract_ip(data, current);
             current += 4;
-            let port = extract_u16(data, current);
+            let port = bytes::extract::extract_u16(data, current);
             current += 2;
             let key = format!("{}:{}", ipaddr, port);
             if !hosts.contains_key(&key) {
@@ -214,9 +218,9 @@ impl Server {
         body: &str) -> usize {
             let mut current = Server::copy_header(buf, &header);
             let body_len = body.len() as u16;
-            copy_u16(buf, current, body_len);
+            bytes::copy::copy_u16(buf, current, body_len);
             current += 2;
-            copy_str(buf, current, body);
+            bytes::copy::copy_str(buf, current, body);
             current += body_len;
             current as usize
     }
@@ -281,11 +285,11 @@ impl Server {
                 let name_len = host.name.len() as u8;
                 buf[current as usize] = name_len;
                 current += 1;
-                copy_str(&mut buf, current, &host.name);
+                bytes::copy::copy_str(&mut buf, current, &host.name);
                 current += name_len as u16;
-                copy_ip(&mut buf, current, &host.ipaddr);
+                bytes::copy::copy_ip(&mut buf, current, &host.ipaddr);
                 current += 4;
-                copy_u16(&mut buf, current, host.port);
+                bytes::copy::copy_u16(&mut buf, current, host.port);
                 current += 2;
             }
             Server::send(&socket, &header.dest_ip, header.dest_port,
@@ -301,20 +305,21 @@ impl Server {
     }
 
     fn copy_header(buf: &mut [u8], header: &Header) -> u16 {
-            copy_str(buf, 0, &header.request);
-            copy_u16(buf, 4, header.dest_port);
-            copy_u16(buf, 6, header.src_port);
-            copy_ip(buf, 8, &header.dest_ip);
-            copy_ip(buf, 12, &header.src_ip);
+            bytes::copy::copy_str(buf, 0, &header.request);
+            bytes::copy::copy_u16(buf, 4, header.dest_port);
+            bytes::copy::copy_u16(buf, 6, header.src_port);
+            bytes::copy::copy_ip(buf, 8, &header.dest_ip);
+            bytes::copy::copy_ip(buf, 12, &header.src_ip);
             return 16;
     }
 
     fn extract_header(data: &[u8]) -> Header {
-        let request = extract_str(&data, 0, 4).trim().to_string(); 
-        let dest_port = extract_u16(&data, 4);
-        let src_port = extract_u16(&data, 6);
-        let dest_ip = extract_ip(&data, 8);
-        let src_ip = extract_ip(&data, 12);
+        let request = bytes::extract::extract_str(&data, 0, 4).trim()
+            .to_string(); 
+        let dest_port = bytes::extract::extract_u16(&data, 4);
+        let src_port = bytes::extract::extract_u16(&data, 6);
+        let dest_ip = bytes::extract::extract_ip(&data, 8);
+        let src_ip = bytes::extract::extract_ip(&data, 12);
         Header {
             request,
             dest_port,
@@ -362,9 +367,9 @@ impl Server {
                 }
             }
         }
-        let req_file_len = extract_u16(&data, current);
+        let req_file_len = bytes::extract::extract_u16(&data, current);
         current += 2;
-        let req_file = extract_str(&data,
+        let req_file = bytes::extract::extract_str(&data,
             current, current + req_file_len as usize);
         if Server::find_file(req_file, &dir) {
             let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
@@ -408,9 +413,9 @@ impl Server {
                 let mut num = connection_num.write().unwrap();
                 *num -= 1;
             });
-            copy_u16(&mut buf, current as u16, port);
+            bytes::copy::copy_u16(&mut buf, current as u16, port);
             current += 2;
-            copy_u16(&mut buf, current as u16, buffer_size);
+            bytes::copy::copy_u16(&mut buf, current as u16, buffer_size);
             current += 2;
             Server::send(&socket, &header.src_ip,
                 header.src_port, buf, current);
@@ -422,37 +427,3 @@ impl Server {
     }
 
 }
-
-fn copy_str(buf: &mut [u8], current: u16, string: &str) {
-    let string = string.as_bytes();
-    for (i, byte) in string.iter().enumerate() {
-        buf[current as usize + i] = *byte;
-    }
-}
-
-fn copy_u16(buf: &mut [u8], current: u16, num: u16) {
-    let num = num.to_be_bytes();
-    buf[current as usize] = num[0];
-    buf[current as usize + 1] = num[1];
-}
-
-fn copy_ip(buf: &mut [u8], current: u16, ip: &str) {
-    let ip: Vec<&str> = ip.split(".").collect();
-    for (i, num) in ip.iter().enumerate() {
-        buf[current as usize + i] = num.parse::<u8>().expect("Wrong ip");
-    }
-}
-
-fn extract_str(data: &[u8], start: usize, end: usize) -> &str {
-    std::str::from_utf8(&data[start..end]).expect("Could not extract str")
-}
-
-fn extract_u16(data: &[u8], start: usize) -> u16 {
-    ((data[start] as u16) << 8) + data[start + 1] as u16 
-}
-
-fn extract_ip(data: &[u8], start: usize) -> String {
-    format!("{}.{}.{}.{}", data[start], data[start + 1],
-        data[start + 2], data[start + 3])
-}
-
