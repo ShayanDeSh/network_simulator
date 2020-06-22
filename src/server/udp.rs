@@ -349,7 +349,6 @@ impl Server {
                 &resph, req_file);
             let addr = format!("{}:{}", resph.src_ip, 0);
             let listener = TcpListener::bind(addr).unwrap();
-            let l = listener.try_clone();
             let socket_addr = listener.local_addr().unwrap();
             let port = socket_addr.port();
             let file = req_file.to_string();
@@ -363,7 +362,9 @@ impl Server {
             }
             thread::spawn(move || {
                 match listener.accept() {
-                    Ok((mut socket, addr)) => {
+                    Ok((mut socket, _addr)) => {
+                        socket.set_nodelay(true)
+                            .expect("Could not set no delay");
                         let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
                         let location = format!("./{}/{}", directory, file);
                         let mut f = fs::File::open(location)
