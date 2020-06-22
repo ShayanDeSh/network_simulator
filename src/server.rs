@@ -9,7 +9,7 @@ mod udp;
 pub fn start(port: String, location: String, dir: String) {
     let table: HashMap<String, String> = HashMap::new();
     let rtable = Mutex::new(table);
-    let hosts: Arc<RwLock<HashMap<String, udp::Host>>> = 
+    let hosts: Arc<RwLock<HashMap<String, RwLock<udp::Host>>>> = 
         Arc::new(RwLock::new(HashMap::new()));
     let requests: Arc<RwLock<Vec<String>>> = 
         Arc::new(RwLock::new(Vec::new()));
@@ -52,15 +52,17 @@ pub fn start(port: String, location: String, dir: String) {
     listen_handler.join().unwrap();
 }
 
-fn print_hosts(hosts: &HashMap<String, udp::Host>) {
+fn print_hosts(hosts: &HashMap<String, RwLock<udp::Host>>) {
     for (_, host) in hosts {
+        let host = host.read().unwrap();
         println!("Name: {:?}", host.name);
         println!("IP adrr.: {:?}", host.ipaddr);
         println!("Port: {}", host.port);
     }
 }
 
-fn read_hosts(hosts: Arc<RwLock<HashMap<String, udp::Host>>>, location: &str) {
+fn read_hosts(hosts: Arc<RwLock<HashMap<String, RwLock<udp::Host>>>>,
+    location: &str) {
     let mut hosts = hosts.write().unwrap();
     let raw_hosts = fs::read_to_string(location)
         .expect("could not read hosts form file");

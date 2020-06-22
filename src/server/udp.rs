@@ -18,12 +18,13 @@ const MAX_CONEECTION: u16 = 20;
 pub struct Host {
     pub name: String,
     pub ipaddr: String,
-    pub port: u16
+    pub port: u16,
+    pub num_requests: u16
 }
 
 pub struct Server {
     pub socket: UdpSocket,
-    pub hosts: Arc<RwLock<HashMap<String, Host>>>,
+    pub hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
     pub requests: Arc<RwLock<Vec<String>>>,
     rtable: Mutex<HashMap<String, String>>,
     pub udp_port: u16,
@@ -57,12 +58,15 @@ impl Header {
 }
 
 impl Host {
-    pub fn new(name: String, ipaddr: String, port: u16) -> Host {
-        Host {
+    pub fn new(name: String, ipaddr: String, port: u16) -> RwLock<Host> {
+        let num_requests = 0;
+        let host = Host {
             name,
             ipaddr,
-            port
-        }
+            port,
+            num_requests
+        };
+        RwLock::new(host)
     }
 }
 
@@ -70,7 +74,7 @@ impl Server {
     pub fn init(
         udp_port: &str,
         rtable: Mutex<HashMap<String, String>>,
-        hosts: Arc<RwLock<HashMap<String, Host>>>,
+        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
         ipaddr: &str,
         requests: Arc<RwLock<Vec<String>>>,
         ) -> Server {
@@ -98,22 +102,24 @@ impl Server {
         let soc3 = self.socket.try_clone().expect("Could not clone");
         let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
         mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
-        let x = self.hosts.clone();
+        let discover_handler_hosts = self.hosts.clone();
         let z = self.hosts.clone();
-        let y = self.hosts.clone();
+        let process_handler_hosts = self.hosts.clone();
         let myaddr = self.ipaddr.clone();
         let udp_p: u16 = self.udp_port.clone();
         let _discover_handler = thread::spawn(move || {
             loop {
                 thread::sleep(Duration::from_secs(10));
-                let hosts = z.read().unwrap();
+                let hosts = discover_handler_hosts.read().unwrap();
                 for (_, host) in hosts.iter() {
+                    let host = host.read().unwrap();
                     if host.ipaddr == myaddr && host.port == udp_p {
                         continue
                     }
                     let header = Header::new("disc",
                         host.port, udp_p, &host.ipaddr, &myaddr);
-                    Server::send_discovery(&soc2, x.clone(), header);
+                    Server::send_discovery(&soc2,
+                        discover_handler_hosts.clone(), header);
                 }
             }
         });
@@ -129,10 +135,12 @@ impl Server {
                 match request {
                     "get" => {
                         Server::process_get(&data, current,
-                            &header, &dir, &soc3, connection_num.clone());
+                            &header, &dir, &soc3, connection_num.clone(), 
+                            process_handler_hosts.clone());
                     },
                     "disc" => {
-                        Server::discovery(y.clone(), &data, 16, amt);
+                        Server::discovery(process_handler_hosts.clone(),
+                        &data, 16, amt);
                     },
                     "OK" => {
                         let file_len = extract_u16(&data, current) as usize;
@@ -181,7 +189,7 @@ impl Server {
         return (process_handler, listen_handler);
     }
 
-    fn discovery(hosts: Arc<RwLock<HashMap<String, Host>>>,
+    fn discovery(hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
         data: &[u8], current: usize, end: usize) {
         let mut current = current;
         let mut hosts = hosts.write().unwrap();
@@ -214,13 +222,14 @@ impl Server {
     }
 
     pub fn get(socket: &UdpSocket, path: &str,
-        hosts: Arc<RwLock<HashMap<String, Host>>>,
+        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
         src_port: u16, src_ip: &str, requests: Arc<RwLock<Vec<String>>>) {
         let mut _requests = requests.write().unwrap();
         _requests.push(path.to_string());
         let clear_request = requests.clone();
         let hosts = hosts.read().unwrap();
         for (_, host) in hosts.iter() {
+            let host = host.read().unwrap();
             if host.ipaddr == src_ip && host.port == src_port {
                 continue;
             }
@@ -249,11 +258,12 @@ impl Server {
     }
 
     pub fn send_discovery(socket: &UdpSocket,
-        hosts: Arc<RwLock<HashMap<String, Host>>>, header: Header) {
+        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>, header: Header) {
         let mut counter = 0;
         let mut flag = true;
         let hosts = hosts.read().unwrap();
-        let hosts: Vec<&Host> = hosts.iter().map(|(_, host)| host).collect();
+        let hosts: Vec<&RwLock<Host>> =
+            hosts.iter().map(|(_, host)| host).collect();
         while flag {
             let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
             let mut current: u16 = Server::copy_header(&mut buf, &header);
@@ -267,14 +277,15 @@ impl Server {
                 if i == hosts.len() - 1 {
                     flag = false;
                 }
-                let name_len = hosts[i].name.len() as u8;
+                let host = hosts[i].read().unwrap();
+                let name_len = host.name.len() as u8;
                 buf[current as usize] = name_len;
                 current += 1;
-                copy_str(&mut buf, current, &hosts[i].name);
+                copy_str(&mut buf, current, &host.name);
                 current += name_len as u16;
-                copy_ip(&mut buf, current, &hosts[i].ipaddr);
+                copy_ip(&mut buf, current, &host.ipaddr);
                 current += 4;
-                copy_u16(&mut buf, current, hosts[i].port);
+                copy_u16(&mut buf, current, host.port);
                 current += 2;
             }
             Server::send(&socket, &header.dest_ip, header.dest_port,
@@ -333,8 +344,22 @@ impl Server {
     }
 
     fn process_get(data: &[u8], current: usize, header: &Header, dir: &str,
-        socket: &UdpSocket, connection_num: Arc<RwLock<u16>>) {
+        socket: &UdpSocket, connection_num: Arc<RwLock<u16>>, 
+        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>) {
         let mut current = current;
+        {
+            let key = format!("{}:{}", header.src_ip, header.src_port);
+            let hosts = hosts.write().unwrap();
+            match hosts.get(&key) {
+                Some(host) => {
+                    let mut host = host.write().unwrap();
+                    host.num_requests += 1;
+                },
+                None => {
+                    return;
+                }
+            }
+        }
         let req_file_len = extract_u16(&data, current);
         current += 2;
         let req_file = extract_str(&data,
@@ -383,6 +408,10 @@ impl Server {
             Server::send(&socket, &header.src_ip,
                 header.src_port, buf, current);
         }
+    }
+
+    fn calculate_buffer(cons_num: u16, num_requests: u16) -> u16 {
+        BUFFER_SIZE as u16 / (cons_num + num_requests / 4)
     }
 
 }
