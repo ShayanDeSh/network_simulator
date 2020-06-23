@@ -374,24 +374,31 @@ impl Server {
         });
     }
 
+    fn increase_num_requests(hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
+        src_ip: &str, src_port: u16) -> u16 {
+        let key = format!("{}:{}", src_ip, src_port);
+        let hosts = hosts.write().unwrap();
+        match hosts.get(&key) {
+            Some(host) => {
+                let mut host = host.write().unwrap();
+                host.num_requests += 1;
+                let num_requests = host.num_requests;
+                return num_requests;
+            },
+            None => {
+                return 0;
+            }
+        }
+    }
+
     fn process_get(data: &[u8], current: usize, header: &Header, dir: &str,
         socket: &UdpSocket, connection_num: Arc<RwLock<u16>>, 
         hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>) {
         let mut current = current;
-        let num_requests: u16;
-        {
-            let key = format!("{}:{}", header.src_ip, header.src_port);
-            let hosts = hosts.write().unwrap();
-            match hosts.get(&key) {
-                Some(host) => {
-                    let mut host = host.write().unwrap();
-                    host.num_requests += 1;
-                    num_requests = host.num_requests;
-                },
-                None => {
-                    return;
-                }
-            }
+        let num_requests: u16 = Server::increase_num_requests(hosts.clone(),
+        &header.src_ip, header.src_port);
+        if num_requests == 0 {
+            return;
         }
         let req_file_len = bytes::extract::extract_u16(&data, current);
         current += 2;
