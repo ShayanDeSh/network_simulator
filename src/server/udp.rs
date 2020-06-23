@@ -12,7 +12,7 @@ use crate::bytes;
 
 const BUFFER_SIZE: usize = 8192;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
-const MAX_CONEECTION: u16 = 20;
+pub const MAX_CONEECTION: u16 = 20;
 
 pub struct Host {
     pub name: String,
@@ -469,7 +469,7 @@ impl Server {
         }
     }
 
-    fn calculate_buffer(cons_num: u16, num_requests: u16) -> u16 {
+    pub fn calculate_buffer(cons_num: u16, num_requests: u16) -> u16 {
         BUFFER_SIZE as u16 / (cons_num + num_requests / 4)
     }
 

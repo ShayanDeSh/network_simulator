@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use std::io;
 
 mod udp;
+mod tcp;
 
 pub fn start(port: String, location: String, dir: String) {
     let hosts: Arc<RwLock<HashMap<String, RwLock<udp::Host>>>> = 
