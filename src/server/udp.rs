@@ -252,15 +252,11 @@ impl Server {
                     flag = false;
                 }
                 let host = hosts[i].read().unwrap();
-                let name_len = host.name.len() as u8;
-                buf[current as usize] = name_len;
-                current += 1;
-                bytes::copy::copy_str(&mut buf, current, &host.name);
-                current += name_len as u16;
-                bytes::copy::copy_ip(&mut buf, current, &host.ipaddr);
-                current += 4;
-                bytes::copy::copy_u16(&mut buf, current, host.port);
-                current += 2;
+                current = Server::copy_discovery_data(&mut buf,
+                    current,
+                    &host.name,
+                    &host.ipaddr,
+                    host.port);
             }
             Server::send(&socket, &header.dest_ip, header.dest_port,
                 buf, current as usize);
@@ -272,6 +268,24 @@ impl Server {
         let ip = format!("{}:{}", ipaddr, port);
         socket.send_to(&buf[0..amt], ip)
             .expect("Could not send");
+    }
+
+    fn copy_discovery_data(buf: &mut [u8; BUFFER_SIZE],
+        current: u16,
+        name: &str,
+        ipaddr: &str,
+        port: u16) -> u16 {
+        let name_len = name.len() as u8;
+        let mut current = current;
+        buf[current as usize] = name_len;
+        current += 1;
+        bytes::copy::copy_str(buf, current, name);
+        current += name_len as u16;
+        bytes::copy::copy_ip(buf, current, ipaddr);
+        current += 4;
+        bytes::copy::copy_u16(buf, current, port);
+        current += 2;
+        current
     }
 
     fn copy_header(buf: &mut [u8], header: &Header) -> u16 {
