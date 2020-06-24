@@ -41,8 +41,12 @@ pub struct Header {
 
 
 impl Header {
-    pub fn new(request: &str, dest_port: u16,
-            src_port: u16, dest_ip: &str, src_ip: &str) -> Header {
+    pub fn new(
+        request: &str, dest_port: u16,
+        src_port: u16,
+        dest_ip: &str,
+        src_ip: &str
+        ) -> Header {
         let request = request.to_string();
         let dest_ip = dest_ip.to_string();
         let src_ip = src_ip.to_string();
@@ -192,8 +196,11 @@ impl Server {
         }
     }
 
-    fn create_file_packet(buf: &mut [u8], header: &Header,
-        body: &str) -> usize {
+    fn create_file_packet(
+        buf: &mut [u8],
+        header: &Header,
+        body: &str
+        ) -> usize {
             let mut current = Server::copy_header(buf, &header);
             let body_len = body.len() as u16;
             bytes::copy::copy_u16(buf, current, body_len);
@@ -203,9 +210,11 @@ impl Server {
             current as usize
     }
 
-    pub fn get(socket: &UdpSocket, path: &str,
+    pub fn get(
+        socket: &UdpSocket, path: &str,
         hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
-        src_port: u16, src_ip: &str, requests: Arc<RwLock<Vec<String>>>) {
+        src_port: u16, src_ip: &str, requests: Arc<RwLock<Vec<String>>>
+        ) {
         let mut _requests = requests.write().unwrap();
         _requests.push(path.to_string());
         let clear_request = requests.clone();
@@ -341,11 +350,13 @@ impl Server {
         return false;
     }
 
-    fn process_ok(current: usize,
+    fn process_ok(
+        current: usize,
         data: [u8; BUFFER_SIZE],
         requests: Arc<RwLock<Vec<String>>>,
         header: Header,
-        dir: &str) {
+        dir: &str
+        ) {
         let mut current = current;
         let file_len = bytes::extract::extract_u16(&data,
             current) as usize;
@@ -383,8 +394,11 @@ impl Server {
         });
     }
 
-    fn increase_num_requests(hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
-        src_ip: &str, src_port: u16) -> u16 {
+    fn increase_num_requests(
+        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
+        src_ip: &str,
+        src_port: u16
+        ) -> u16 {
         let key = format!("{}:{}", src_ip, src_port);
         let hosts = hosts.write().unwrap();
         match hosts.get(&key) {
@@ -400,9 +414,14 @@ impl Server {
         }
     }
 
-    fn process_get(data: &[u8], current: usize, header: &Header, dir: &str,
+    fn process_get(
+        data: &[u8],
+        current: usize,
+        header: &Header,
+        dir: &str,
         socket: &UdpSocket, connection_num: Arc<RwLock<u16>>, 
-        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>) {
+        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>
+        ) {
         let mut current = current;
         let num_requests: u16 = Server::increase_num_requests(hosts.clone(),
         &header.src_ip, header.src_port);
@@ -464,8 +483,10 @@ impl Server {
         }
     }
 
-    fn start_discovery(hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>, 
-        myaddr: &str, udp_p: u16, socket: UdpSocket) {
+    fn start_discovery(
+        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>, 
+        myaddr: &str, udp_p: u16, socket: UdpSocket
+        ) {
         let _hosts = hosts.read().unwrap();
         for (_, host) in _hosts.iter() {
             let host = host.read().unwrap();

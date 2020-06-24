@@ -1,18 +1,21 @@
 use std::net::{TcpListener, TcpStream};
 use std::io::prelude::*;
+
 use std::thread;
 use std::fs;
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::sync::{Arc, RwLock};
 use crate::server::udp;
 
-pub fn forward(src_ip: &str,
+pub fn forward(
+    src_ip: &str,
     src_port: u16,
     self_ip: &str,
     buffer_size: u16,
     dir: &str,
     file: &str,
-    connection_num: Arc<RwLock<u16>>) -> u16 {
+    connection_num: Arc<RwLock<u16>>
+    ) -> u16 {
     let mut buf  = vec![0 as u8; buffer_size as usize];
     let addr = format!("{}:{}", src_ip, src_port);
     let (tx, rx): (Sender<(Vec<u8>, bool)>,
