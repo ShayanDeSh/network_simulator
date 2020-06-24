@@ -4,8 +4,6 @@ use std::io::prelude::*;
 use std::thread;
 use std::fs;
 use std::sync::mpsc::{Sender, Receiver, channel};
-use std::sync::{Arc, RwLock};
-use crate::server::udp;
 
 pub fn forward(
     src_ip: &str,
@@ -14,7 +12,6 @@ pub fn forward(
     buffer_size: u16,
     dir: &str,
     file: &str,
-    connection_num: Arc<RwLock<u16>>
     ) -> u16 {
     let mut buf  = vec![0 as u8; buffer_size as usize];
     let addr = format!("{}:{}", src_ip, src_port);
@@ -36,13 +33,6 @@ pub fn forward(
     let listener = TcpListener::bind(addr).unwrap();
     let socket_addr = listener.local_addr().unwrap();
     let port = socket_addr.port();
-    {
-        let mut num = connection_num.write().unwrap();
-        if *num > udp::MAX_CONEECTION  {
-            return 0;
-        }
-        *num += 1;
-    }
     thread::spawn(move || {
         match listener.accept() {
             Ok((mut socket, _addr)) => {
@@ -58,8 +48,6 @@ pub fn forward(
             },
             Err(e) => println!("couldn't get client: {:?}", e)
         }
-        let mut num = connection_num.write().unwrap();
-        *num -= 1;
     });
     port
 }

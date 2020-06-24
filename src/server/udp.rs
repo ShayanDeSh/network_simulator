@@ -9,6 +9,7 @@ use std::time::Duration;
 use std::fs;
 use std::net::{TcpListener, TcpStream, IpAddr};
 use crate::bytes;
+use crate::server::tcp;
 
 const BUFFER_SIZE: usize = 8192;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
@@ -156,7 +157,7 @@ impl Server {
                     },
                     "OK" => {
                         Server::process_ok(current, data, requests.clone(),
-                            header, &dir);
+                            header, &dir, &process_handler_soc);
                     },
                     _ => {
                         continue;
@@ -374,7 +375,8 @@ impl Server {
         data: [u8; BUFFER_SIZE],
         requests: Arc<RwLock<Vec<(String, String)>>>,
         header: Header,
-        dir: &str
+        dir: &str,
+        socket: &UdpSocket
         ) {
         let mut current = current;
         let file_len = bytes::extract::extract_u16(&data,
@@ -383,14 +385,43 @@ impl Server {
         let file = bytes::extract::extract_str(&data, current,
             current + file_len);
         current += file_len;
-        if Server::find_file(&file, &dir) {
-            return;
-        }
+        let mut requests = requests.write().unwrap();
+        let index = requests.iter().position(|(x, _)| *x == file);
+        let dest_addr: String;
+        match index {
+            Some(index) => {
+                let (_, b) = requests.remove(index);
+                dest_addr = b;
+            },
+            None => {
+                return;
+            }
+        };
         let tcp_port = bytes::extract::extract_u16(&data,
             current);
         current += 2;
         let buffer_size = bytes::extract::extract_u16(&data,
             current);
+        if dest_addr != format!("{}:{}", header.dest_ip, header.dest_port) {
+            let src_ip = header.dest_ip;
+            let listen_tcp_port = tcp::forward(
+                &header.src_ip,
+                tcp_port,
+                &src_ip,
+                buffer_size,
+                &dir,
+                &file        
+            );
+            let splited_addr: Vec<&str> =
+                dest_addr.split(":").collect();
+            let dest_ip = splited_addr[0];
+            let dest_port = splited_addr[1].parse::<u16>().unwrap();
+            let src_port = dest_port;
+            Server::send_ok(&file, listen_tcp_port, buffer_size,
+                &socket, dest_port, dest_ip,
+                src_port, &src_ip);
+            return;
+        }
         println!("buffer_size is: {}", buffer_size);
         let mut buf  = vec![0 as u8; buffer_size as usize];
         let addr = format!("{}:{}", header.src_ip, tcp_port);
@@ -495,14 +526,7 @@ impl Server {
         let req_file = bytes::extract::extract_str(&data,
             current, current + req_file_len as usize);
         if Server::find_file(req_file, &dir) {
-            let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-            let resph = Header::new("OK", header.src_port,
-                header.dest_port, 
-                &header.src_ip, &header.dest_ip);
-            let mut current 
-                = Server::create_file_packet(&mut buf,
-                &resph, req_file);
-            let addr = format!("{}:{}", resph.src_ip, 0);
+            let addr = format!("{}:{}", header.dest_ip, 0);
             let listener = TcpListener::bind(addr).unwrap();
             let socket_addr = listener.local_addr().unwrap();
             let port = socket_addr.port();
@@ -536,12 +560,9 @@ impl Server {
                 let mut num = connection_num.write().unwrap();
                 *num -= 1;
             });
-            bytes::copy::copy_u16(&mut buf, current as u16, port);
-            current += 2;
-            bytes::copy::copy_u16(&mut buf, current as u16, buffer_size);
-            current += 2;
-            Server::send(&socket, &header.src_ip,
-                header.src_port, buf, current);
+            Server::send_ok(req_file, port, buffer_size, socket,
+                header.src_port, &header.src_ip, header.dest_port,
+                &header.dest_ip);
             return;
         }
         if amigateway {
@@ -582,6 +603,29 @@ impl Server {
                 gateway
             );
         }
+    }
+
+    fn send_ok(
+        req_file: &str,
+        port: u16,
+        buffer_size: u16,
+        socket: &UdpSocket,
+        dest_port: u16,
+        dest_ip: &str,
+        src_port: u16,
+        src_ip: &str
+        ) {
+        let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        let resph = Header::new("OK", dest_port, src_port, dest_ip, src_ip);
+        let mut current 
+            = Server::create_file_packet(&mut buf,
+            &resph, req_file);
+        bytes::copy::copy_u16(&mut buf, current as u16, port);
+        current += 2;
+        bytes::copy::copy_u16(&mut buf, current as u16, buffer_size);
+        current += 2;
+        Server::send(&socket, dest_ip,
+            dest_port, buf, current);
     }
 
     pub fn calculate_buffer(cons_num: u16, num_requests: u16) -> u16 {
