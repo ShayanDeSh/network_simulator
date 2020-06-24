@@ -29,6 +29,7 @@ pub struct Server {
     pub udp_port: u16,
     pub ipaddr: String,
     pub connection_num: Arc<RwLock<u16>>,
+    pub gateway: bool
 }
 
 pub struct Header {
@@ -92,13 +93,15 @@ impl Server {
         let udp_port = udp_port.parse::<u16>().expect("non parsable port");
         let ipaddr = ipaddr.to_string();
         let connection_num = Arc::new(RwLock::new(0));
+        let gateway = false;
         Server {
             socket,
             hosts,
             requests,
             udp_port,
             ipaddr,
-            connection_num
+            connection_num,
+            gateway
         }
     }
 
@@ -120,7 +123,8 @@ impl Server {
                 Server::start_discovery(
                     discover_handler_hosts.clone(),
                     &myaddr, udp_p,
-                    discover_handler_soc.try_clone().unwrap()
+                    discover_handler_soc.try_clone().unwrap(),
+                    self.gateway
                     );
             }
         });
@@ -248,9 +252,13 @@ impl Server {
         });
     }
 
-    pub fn send_discovery(socket: &UdpSocket,
+    pub fn send_discovery(
+        socket: &UdpSocket,
         hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
-        header: Header) {
+        header: Header,
+        gateway: bool,
+        amigateway: bool
+        ) {
         let mut counter = 0;
         let mut flag = true;
         let hosts = hosts.read().unwrap();
@@ -270,6 +278,10 @@ impl Server {
                     flag = false;
                 }
                 let host = hosts[i].read().unwrap();
+                if (amigateway && gateway && !host.gateway) || 
+                (amigateway && host.gateway && !gateway) {
+                    continue;
+                }
                 current = Server::copy_discovery_data(&mut buf,
                     current,
                     &host.name,
@@ -394,11 +406,10 @@ impl Server {
         });
     }
 
-    fn increase_num_requests(
-        hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
+    fn increase_num_requests(hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
         src_ip: &str,
         src_port: u16
-        ) -> u16 {
+    ) -> u16 {
         let key = format!("{}:{}", src_ip, src_port);
         let hosts = hosts.write().unwrap();
         match hosts.get(&key) {
@@ -421,7 +432,7 @@ impl Server {
         dir: &str,
         socket: &UdpSocket, connection_num: Arc<RwLock<u16>>, 
         hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>
-        ) {
+    ) {
         let mut current = current;
         let num_requests: u16 = Server::increase_num_requests(hosts.clone(),
         &header.src_ip, header.src_port);
@@ -485,8 +496,11 @@ impl Server {
 
     fn start_discovery(
         hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>, 
-        myaddr: &str, udp_p: u16, socket: UdpSocket
-        ) {
+        myaddr: &str,
+        udp_p: u16,
+        socket: UdpSocket,
+        gateway: bool
+    ) {
         let _hosts = hosts.read().unwrap();
         for (_, host) in _hosts.iter() {
             let host = host.read().unwrap();
@@ -495,7 +509,13 @@ impl Server {
             }
             let header = Header::new("disc",
                 host.port, udp_p, &host.ipaddr, &myaddr);
-            Server::send_discovery(&socket, hosts.clone(), header);
+            Server::send_discovery(
+                &socket,
+                hosts.clone(),
+                header,
+                host.gateway,
+                gateway
+            );
         }
     }
 
