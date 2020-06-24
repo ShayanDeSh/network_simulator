@@ -403,6 +403,7 @@ impl Server {
         let buffer_size = bytes::extract::extract_u16(&data,
             current);
         if dest_addr != format!("{}:{}", header.dest_ip, header.dest_port) {
+            println!("here");
             let src_ip = header.dest_ip;
             let listen_tcp_port = tcp::forward(
                 &header.src_ip,
@@ -430,8 +431,13 @@ impl Server {
         let location = format!("./{}/{}", dir, file);
         let mut f = fs::File::create(location).unwrap();
         thread::spawn(move || {
-            while tcp_connection.read(&mut buf).unwrap() != 0 {
-                f.write(&mut buf)
+            loop {
+                let a = tcp_connection.read(&mut buf).unwrap(); 
+                println!("read: {}", a);
+                if a == 0 {
+                    break;
+                }
+                f.write(&buf[0..a])
                     .expect("Could not write file");
             }
         });
@@ -547,12 +553,17 @@ impl Server {
                         socket.set_nodelay(true)
                             .expect("Could not set no delay");
                         let mut buffer 
-                            = vec![0 as u8; 2048];
+                            = vec![0 as u8; buffer_size as usize];
                         let location = format!("./{}/{}", directory, file);
                         let mut f = fs::File::open(location)
                             .expect("Could not open file");
-                        while f.read(&mut buffer).unwrap() != 0 {
-                            socket.write(&buffer).unwrap();
+                        loop {
+                            let a = f.read(&mut buffer).unwrap(); 
+                            println!("wrote: {}", a);
+                            if a == 0 {
+                                break;
+                            }
+                            socket.write(&buffer[0..a]).unwrap();
                         }
                     },
                     Err(e) => println!("couldn't get client: {:?}", e)
