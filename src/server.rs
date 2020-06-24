@@ -3,6 +3,7 @@ use std::fs;
 use std::thread;
 use std::sync::{Arc, RwLock};
 use std::io;
+use std::net::{IpAddr};
 
 mod udp;
 mod tcp;
@@ -72,11 +73,14 @@ fn read_hosts(hosts: Arc<RwLock<HashMap<String, RwLock<udp::Host>>>>,
     raw_hosts.pop();
     for raw_host in raw_hosts {
         let host:Vec<&str> = raw_host.split(" ").collect();
+        let ip: IpAddr = host[1].parse().unwrap();
+        let gateway = ip.is_loopback();
         let key = format!("{}:{}", host[1], host[2]);
         let host = udp::Host::new(
         host[0].to_string(),
         host[1].to_string(),
-        host[2].parse::<u16>().expect("not parsable")
+        host[2].parse::<u16>().expect("not parsable"),
+        gateway
         );
         hosts.insert(key, host);
     }

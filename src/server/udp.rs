@@ -7,7 +7,7 @@ use std::thread;
 use std::mem;
 use std::time::Duration;
 use std::fs;
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, IpAddr};
 use crate::bytes;
 
 const BUFFER_SIZE: usize = 8192;
@@ -18,7 +18,8 @@ pub struct Host {
     pub name: String,
     pub ipaddr: String,
     pub port: u16,
-    pub num_requests: u16
+    pub num_requests: u16,
+    pub gateway: bool
 }
 
 pub struct Server {
@@ -56,13 +57,19 @@ impl Header {
 }
 
 impl Host {
-    pub fn new(name: String, ipaddr: String, port: u16) -> RwLock<Host> {
+    pub fn new(
+        name: String, 
+        ipaddr: String, 
+        port: u16, 
+        gateway: bool
+        ) -> RwLock<Host> {
         let num_requests = 0;
         let host = Host {
             name,
             ipaddr,
             port,
-            num_requests
+            num_requests,
+            gateway
         };
         RwLock::new(host)
     }
@@ -177,7 +184,9 @@ impl Server {
             current += 2;
             let key = format!("{}:{}", ipaddr, port);
             if !hosts.contains_key(&key) {
-                let host = Host::new(name.to_string(), ipaddr, port);
+                let ip: IpAddr = ipaddr.parse().unwrap();
+                let gateway = ip.is_loopback(); 
+                let host = Host::new(name.to_string(), ipaddr, port, gateway);
                 hosts.insert(key, host); 
             }
         }
