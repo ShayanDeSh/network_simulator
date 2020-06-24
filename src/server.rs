@@ -11,7 +11,7 @@ mod tcp;
 pub fn start(port: String, location: String, dir: String) {
     let hosts: Arc<RwLock<HashMap<String, RwLock<udp::Host>>>> = 
         Arc::new(RwLock::new(HashMap::new()));
-    let requests: Arc<RwLock<Vec<String>>> = 
+    let requests: Arc<RwLock<Vec<(String, String)>>> = 
         Arc::new(RwLock::new(Vec::new()));
     if !location.is_empty() {
         read_hosts(hosts.clone(), &location);
