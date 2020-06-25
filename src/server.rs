@@ -8,7 +8,7 @@ use std::net::{IpAddr};
 mod udp;
 mod tcp;
 
-pub fn start(port: String, location: String, dir: String) {
+pub fn start(port: String, location: String, dir: String, ip: String) {
     let hosts: Arc<RwLock<HashMap<String, RwLock<udp::Host>>>> = 
         Arc::new(RwLock::new(HashMap::new()));
     let requests: Arc<RwLock<Vec<(String, String)>>> = 
@@ -18,7 +18,7 @@ pub fn start(port: String, location: String, dir: String) {
     }
     let list_clone =  hosts.clone();
     let connection = udp::Server::init(&port,
-        hosts.clone(), "127.0.0.1", requests.clone());
+        hosts.clone(), &ip, requests.clone());
     let socket = connection.socket.try_clone()
     .expect("Could not clone socket");
     let _requests = requests.clone();
@@ -40,7 +40,7 @@ pub fn start(port: String, location: String, dir: String) {
                     input = input.trim().to_string();
                     udp::Server::get(&socket, &input, hosts.clone(), 
                         port.parse::<u16>().unwrap(),
-                        "127.0.0.1", requests.clone()); 
+                        &ip, requests.clone()); 
                 }, 
                 _ => {
                     continue;
@@ -76,7 +76,7 @@ fn read_hosts(
     for raw_host in raw_hosts {
         let host:Vec<&str> = raw_host.split(" ").collect();
         let ip: IpAddr = host[1].parse().unwrap();
-        let gateway = ip.is_loopback();
+        let gateway = !ip.is_loopback();
         let key = format!("{}:{}", host[1], host[2]);
         let host = udp::Host::new(
         host[0].to_string(),

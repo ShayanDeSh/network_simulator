@@ -88,13 +88,14 @@ impl Server {
         ipaddr: &str,
         requests: Arc<RwLock<Vec<(String, String)>>>,
         ) -> Server {
-        let socket  = UdpSocket::bind(format!("127.0.0.1:{}", udp_port))
+        let socket  = UdpSocket::bind(format!("{}:{}", ipaddr,udp_port))
             .expect("Something went
                 wrong while trying to create UDP socket!!");
         let udp_port = udp_port.parse::<u16>().expect("non parsable port");
         let ipaddr = ipaddr.to_string();
         let connection_num = Arc::new(RwLock::new(0));
-        let gateway = false;
+        let addr: IpAddr = ipaddr.parse().unwrap();
+        let gateway = !addr.is_loopback();
         Server {
             socket,
             hosts,
@@ -106,9 +107,11 @@ impl Server {
         }
     }
 
-    pub fn listen(self, dir: String) -> (thread::JoinHandle<u32>,
+    pub fn listen(self, dir: String) -> (
             thread::JoinHandle<u32>,
-            thread::JoinHandle<u32>) {
+            thread::JoinHandle<u32>,
+            thread::JoinHandle<u32>
+        ) {
 
         let myaddr = self.ipaddr.clone();
         let udp_p: u16 = self.udp_port.clone();
@@ -196,7 +199,7 @@ impl Server {
             let key = format!("{}:{}", ipaddr, port);
             if !hosts.contains_key(&key) {
                 let ip: IpAddr = ipaddr.parse().unwrap();
-                let gateway = ip.is_loopback(); 
+                let gateway = !ip.is_loopback(); 
                 let host = Host::new(name.to_string(), ipaddr, port, gateway);
                 hosts.insert(key, host); 
             }
@@ -286,8 +289,11 @@ impl Server {
                     flag = false;
                 }
                 let host = hosts[i].read().unwrap();
-                if (amigateway && gateway && !host.gateway) || 
-                (amigateway && host.gateway && !gateway) {
+                if (host.ipaddr == header.src_ip &&
+                    host.port == header.src_port) && 
+                ((amigateway && gateway && !host.gateway) ||
+                (amigateway && host.gateway && !gateway)) {
+                    println!("Here");
                     continue;
                 }
                 current = Server::copy_discovery_data(&mut buf,
