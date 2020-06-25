@@ -117,7 +117,6 @@ impl Server {
         let udp_p: u16 = self.udp_port.clone();
         let (tx, rx): (mpsc::Sender<(usize, [u8; BUFFER_SIZE])>,
         mpsc::Receiver<(usize, [u8; BUFFER_SIZE])>) = mpsc::channel();
-
         let discover_handler_hosts = self.hosts.clone();
         let discover_handler_soc = self.socket.try_clone()
             .expect("Could not clone");
@@ -175,7 +174,7 @@ impl Server {
             loop {
                 let mut buf = [32; BUFFER_SIZE];
                 let (amt, _src) = listen_handler_soc.recv_from(&mut buf)
-                    .expect("shit happened");
+                    .unwrap();
                 tx.send((amt, buf)).unwrap();
             }
         });
@@ -309,8 +308,7 @@ impl Server {
     pub fn send(socket: &UdpSocket,
         ipaddr: &str,port: u16, buf: [u8; BUFFER_SIZE], amt: usize) {
         let ip = format!("{}:{}", ipaddr, port);
-        socket.send_to(&buf[0..amt], ip)
-            .expect("Could not send");
+        socket.send_to(&buf[0..amt], ip).unwrap();
     }
 
     fn copy_discovery_data(buf: &mut [u8; BUFFER_SIZE],
