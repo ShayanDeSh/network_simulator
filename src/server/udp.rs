@@ -1,5 +1,4 @@
 use std::net::UdpSocket;
-use std::io::prelude::*;
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::{Arc, RwLock};
@@ -7,7 +6,7 @@ use std::thread;
 use std::mem;
 use std::time::Duration;
 use std::fs;
-use std::net::{TcpListener, TcpStream, IpAddr};
+use std::net::{IpAddr};
 use crate::bytes;
 use crate::server::tcp;
 use crate::server::header::*;
@@ -328,14 +327,8 @@ impl Server {
             current);
         if dest_addr != format!("{}:{}", header.dest_ip, header.dest_port) {
             let src_ip = header.dest_ip;
-            let listen_tcp_port = tcp::forward(
-                &header.src_ip,
-                tcp_port,
-                &src_ip,
-                buffer_size,
-                &dir,
-                &file        
-            );
+            let listen_tcp_port = tcp::forward(&header.src_ip, tcp_port, 
+                &src_ip, buffer_size, &dir, &file );
             let splited_addr: Vec<&str> =
                 dest_addr.split(":").collect();
             let dest_ip = splited_addr[0];
@@ -347,22 +340,8 @@ impl Server {
             return;
         }
         println!("buffer_size is: {}", buffer_size);
-        let mut buf  = vec![0 as u8; buffer_size as usize];
-        let addr = format!("{}:{}", header.src_ip, tcp_port);
-        let mut tcp_connection =
-            TcpStream::connect(addr).unwrap();
-        let location = format!("./{}/{}", dir, file);
-        let mut f = fs::File::create(location).unwrap();
-        thread::spawn(move || {
-            loop {
-                let a = tcp_connection.read(&mut buf).unwrap(); 
-                if a == 0 {
-                    break;
-                }
-                f.write(&buf[0..a])
-                    .expect("Could not write file");
-            }
-        });
+        tcp::read_from_server(buffer_size, &header.src_ip,
+            tcp_port, dir, file);
     }
 
     fn increase_num_requests(hosts: Arc<RwLock<HashMap<String, RwLock<Host>>>>,
@@ -454,12 +433,6 @@ impl Server {
         let req_file = bytes::extract::extract_str(&data,
             current, current + req_file_len as usize);
         if Server::find_file(req_file, &dir) {
-            let addr = format!("{}:{}", header.dest_ip, 0);
-            let listener = TcpListener::bind(addr).unwrap();
-            let socket_addr = listener.local_addr().unwrap();
-            let port = socket_addr.port();
-            let file = req_file.to_string();
-            let directory = dir.to_string();
             let buffer_size: u16; 
             {
                 let mut num = connection_num.write().unwrap();
@@ -469,29 +442,8 @@ impl Server {
                 *num += 1;
                 buffer_size = Server::calculate_buffer(*num, num_requests);
             }
-            thread::spawn(move || {
-                match listener.accept() {
-                    Ok((mut socket, _addr)) => {
-                        socket.set_nodelay(true)
-                            .expect("Could not set no delay");
-                        let mut buffer 
-                            = vec![0 as u8; buffer_size as usize];
-                        let location = format!("./{}/{}", directory, file);
-                        let mut f = fs::File::open(location)
-                            .expect("Could not open file");
-                        loop {
-                            let a = f.read(&mut buffer).unwrap(); 
-                            if a == 0 {
-                                break;
-                            }
-                            socket.write(&buffer[0..a]).unwrap();
-                        }
-                    },
-                    Err(e) => println!("couldn't get client: {:?}", e)
-                }
-                let mut num = connection_num.write().unwrap();
-                *num -= 1;
-            });
+            let port = tcp::write_to_client(&header.dest_ip, req_file, dir,
+                buffer_size, connection_num.clone());
             Server::send_ok(req_file, port, buffer_size, socket,
                 header.src_port, &header.src_ip, header.dest_port,
                 &header.dest_ip);
@@ -500,13 +452,8 @@ impl Server {
         if amigateway {
             let blocked_host =
                 format!("{}:{}", header.src_ip, header.src_port);
-            Server::forward_get(
-                socket.clone(),
-                &req_file,
-                hosts.clone(),
-                header.dest_port,
-                &header.dest_ip,
-                requests.clone(),
+            Server::forward_get(socket.clone(), &req_file, hosts.clone(),
+                header.dest_port, &header.dest_ip, requests.clone(),
                 &blocked_host
             );
         }

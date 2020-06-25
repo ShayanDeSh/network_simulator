@@ -79,6 +79,7 @@ fn list(hosts: &HashMap<String, RwLock<host::Host>>) {
         println!("IP adrr.: {:?}", host.ipaddr);
         println!("Port: {}", host.port);
     }
+    println!("------------------------------------------------------------");
 }
 
 // Reading list of host from the file provided using -l
