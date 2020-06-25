@@ -1,27 +1,46 @@
 use std::collections::HashMap;
+
 use std::fs;
 use std::thread;
 use std::sync::{Arc, RwLock};
 use std::io;
-use std::net::{IpAddr};
+use std::net::{IpAddr, UdpSocket};
 
 mod udp;
 mod tcp;
+mod header;
+mod host;
 
 pub fn start(port: String, location: String, dir: String, ip: String) {
-    let hosts: Arc<RwLock<HashMap<String, RwLock<udp::Host>>>> = 
+    let hosts: Arc<RwLock<HashMap<String, RwLock<host::Host>>>> = 
         Arc::new(RwLock::new(HashMap::new()));
     let requests: Arc<RwLock<Vec<(String, String)>>> = 
         Arc::new(RwLock::new(Vec::new()));
     if !location.is_empty() {
         read_hosts(hosts.clone(), &location);
     }
-    let list_clone =  hosts.clone();
     let connection = udp::Server::init(&port,
         hosts.clone(), &ip, requests.clone());
     let socket = connection.socket.try_clone()
     .expect("Could not clone socket");
     let _requests = requests.clone();
+    let port: u16 = port.parse().unwrap();
+    input(hosts.clone(), socket, port, ip.clone(), _requests);
+    let (process_handler, listen_handler, discover_handler) 
+        = connection.listen(dir);
+    process_handler.join().unwrap();
+    listen_handler.join().unwrap();
+    discover_handler.join().unwrap();
+}
+
+
+fn input(
+    hosts: Arc<RwLock<HashMap<String, RwLock<host::Host>>>>,
+    socket: UdpSocket,
+    port: u16,
+    ip: String,
+    requests: Arc<RwLock<Vec<(String, String)>>>,
+    ) {
     thread::spawn(move || {
         loop {
             let mut input = String::new();
@@ -30,8 +49,8 @@ pub fn start(port: String, location: String, dir: String, ip: String) {
             let input = input.trim();
             match input  {
                 "list" => {
-                    let hosts = list_clone.read().unwrap();
-                    print_hosts(&hosts);
+                    let hosts = hosts.read().unwrap();
+                    list(&hosts);
                 },
                 "get" => {
                     let mut input = String::new();
@@ -39,7 +58,7 @@ pub fn start(port: String, location: String, dir: String, ip: String) {
                         .expect("Something Went wrong on reading from input");
                     input = input.trim().to_string();
                     udp::Server::get(&socket, &input, hosts.clone(), 
-                        port.parse::<u16>().unwrap(),
+                        port,
                         &ip, requests.clone()); 
                 }, 
                 _ => {
@@ -48,24 +67,23 @@ pub fn start(port: String, location: String, dir: String, ip: String) {
             }
         }
     });
-    let (process_handler, listen_handler, discover_handler) 
-        = connection.listen(dir);
-    process_handler.join().unwrap();
-    listen_handler.join().unwrap();
-    discover_handler.join().unwrap();
 }
 
-fn print_hosts(hosts: &HashMap<String, RwLock<udp::Host>>) {
+
+// List command
+fn list(hosts: &HashMap<String, RwLock<host::Host>>) {
     for (_, host) in hosts {
         let host = host.read().unwrap();
+        println!("------------------------------------------------------------");
         println!("Name: {:?}", host.name);
         println!("IP adrr.: {:?}", host.ipaddr);
         println!("Port: {}", host.port);
     }
 }
 
+// Reading list of host from the file provided using -l
 fn read_hosts(
-    hosts: Arc<RwLock<HashMap<String, RwLock<udp::Host>>>>,
+    hosts: Arc<RwLock<HashMap<String, RwLock<host::Host>>>>,
     location: &str
     ) {
     let mut hosts = hosts.write().unwrap();
@@ -78,7 +96,7 @@ fn read_hosts(
         let ip: IpAddr = host[1].parse().unwrap();
         let gateway = !ip.is_loopback();
         let key = format!("{}:{}", host[1], host[2]);
-        let host = udp::Host::new(
+        let host = host::Host::new(
         host[0].to_string(),
         host[1].to_string(),
         host[2].parse::<u16>().expect("not parsable"),

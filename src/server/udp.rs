@@ -10,18 +10,12 @@ use std::fs;
 use std::net::{TcpListener, TcpStream, IpAddr};
 use crate::bytes;
 use crate::server::tcp;
+use crate::server::header::*;
+use crate::server::host::Host;
 
 const BUFFER_SIZE: usize = 8192;
 const USEFUL_BUFFER_SIZE: usize = BUFFER_SIZE - 16;
 pub const MAX_CONEECTION: u16 = 20;
-
-pub struct Host {
-    pub name: String,
-    pub ipaddr: String,
-    pub port: u16,
-    pub num_requests: u16,
-    pub gateway: bool
-}
 
 pub struct Server {
     pub socket: UdpSocket,
@@ -31,54 +25,6 @@ pub struct Server {
     pub ipaddr: String,
     pub connection_num: Arc<RwLock<u16>>,
     pub gateway: bool
-}
-
-pub struct Header {
-    pub request: String,
-    pub dest_port: u16,
-    pub src_port: u16,
-    pub dest_ip: String,
-    pub src_ip: String
-}
-
-
-impl Header {
-    pub fn new(
-        request: &str, dest_port: u16,
-        src_port: u16,
-        dest_ip: &str,
-        src_ip: &str
-        ) -> Header {
-        let request = request.to_string();
-        let dest_ip = dest_ip.to_string();
-        let src_ip = src_ip.to_string();
-        Header {
-            request,
-            dest_port,
-            src_port,
-            dest_ip,
-            src_ip
-        }
-    }
-}
-
-impl Host {
-    pub fn new(
-        name: String, 
-        ipaddr: String, 
-        port: u16, 
-        gateway: bool
-        ) -> RwLock<Host> {
-        let num_requests = 0;
-        let host = Host {
-            name,
-            ipaddr,
-            port,
-            num_requests,
-            gateway
-        };
-        RwLock::new(host)
-    }
 }
 
 impl Server {
@@ -141,7 +87,7 @@ impl Server {
         let process_handler = thread::spawn(move || {
             loop {
                 let (amt, data) = rx.recv().unwrap();
-                let header = Server::extract_header(&data);
+                let header = Header::extract_header(&data);
                 let current = 16;
                 let request:&str = &header.request.replace("\u{0}", "");
                 println!("recived {:?}", request);
@@ -210,7 +156,7 @@ impl Server {
         header: &Header,
         body: &str
         ) -> usize {
-            let mut current = Server::copy_header(buf, &header);
+            let mut current = Header::copy_header(buf, &header);
             let body_len = body.len() as u16;
             bytes::copy::copy_u16(buf, current, body_len);
             current += 2;
@@ -276,7 +222,7 @@ impl Server {
             hosts.iter().map(|(_, host)| host).collect();
         while flag {
             let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
-            let mut current: u16 = Server::copy_header(&mut buf, &header);
+            let mut current: u16 = Header::copy_header(&mut buf, &header);
             let mut remained_buffer: i32 = USEFUL_BUFFER_SIZE as i32;
             for i in counter..hosts.len() {
                 remained_buffer -= mem::size_of::<Host>() as i32;
@@ -327,31 +273,6 @@ impl Server {
         bytes::copy::copy_u16(buf, current, port);
         current += 2;
         current
-    }
-
-    fn copy_header(buf: &mut [u8], header: &Header) -> u16 {
-            bytes::copy::copy_str(buf, 0, &header.request);
-            bytes::copy::copy_u16(buf, 4, header.dest_port);
-            bytes::copy::copy_u16(buf, 6, header.src_port);
-            bytes::copy::copy_ip(buf, 8, &header.dest_ip);
-            bytes::copy::copy_ip(buf, 12, &header.src_ip);
-            return 16;
-    }
-
-    fn extract_header(data: &[u8]) -> Header {
-        let request = bytes::extract::extract_str(&data, 0, 4).trim()
-            .to_string(); 
-        let dest_port = bytes::extract::extract_u16(&data, 4);
-        let src_port = bytes::extract::extract_u16(&data, 6);
-        let dest_ip = bytes::extract::extract_ip(&data, 8);
-        let src_ip = bytes::extract::extract_ip(&data, 12);
-        Header {
-            request,
-            dest_port,
-            src_port,
-            dest_ip,
-            src_ip
-        }
     }
 
     fn find_file(req: &str, dir: &str) -> bool {
