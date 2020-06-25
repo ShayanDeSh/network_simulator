@@ -437,7 +437,6 @@ impl Server {
         thread::spawn(move || {
             loop {
                 let a = tcp_connection.read(&mut buf).unwrap(); 
-                println!("read: {}", a);
                 if a == 0 {
                     break;
                 }
@@ -563,7 +562,6 @@ impl Server {
                             .expect("Could not open file");
                         loop {
                             let a = f.read(&mut buffer).unwrap(); 
-                            println!("wrote: {}", a);
                             if a == 0 {
                                 break;
                             }
