@@ -15,19 +15,23 @@ pub fn forward(
     ) -> u16 {
     let mut buf  = vec![0 as u8; buffer_size as usize];
     let addr = format!("{}:{}", src_ip, src_port);
-    let (tx, rx): (Sender<(Vec<u8>, bool)>,
-    Receiver<(Vec<u8>, bool)>) = channel();
+    let (tx, rx): (Sender<(Vec<u8>, usize)>,
+    Receiver<(Vec<u8>, usize)>) = channel();
     let mut tcp_connection =
         TcpStream::connect(addr).unwrap();
     let location = format!("./{}/{}", dir, file);
     let mut f = fs::File::create(location).unwrap();
     thread::spawn(move || {
-        while tcp_connection.read(&mut buf).unwrap() != 0 {
-            f.write(&mut buf)
+        loop  {
+            let count = tcp_connection.read(&mut buf).unwrap();
+            if count <= 0 {
+                break;
+            }
+            f.write(&mut buf[0..count])
                 .expect("Could not write file");
-            tx.send((buf.clone(), true)).unwrap();
+            tx.send((buf.clone(), count)).unwrap();
         }
-        tx.send((buf, false)).unwrap();
+        tx.send((buf, 0)).unwrap();
     });
     let addr = format!("{}:{}", self_ip, 0);
     let listener = TcpListener::bind(addr).unwrap();
@@ -39,11 +43,11 @@ pub fn forward(
                 socket.set_nodelay(true)
                     .expect("Could not set no delay");
                 loop {
-                    let (data, flag) = rx.recv().unwrap();
-                    if !flag {
+                    let (data, count) = rx.recv().unwrap();
+                    if count == 0 {
                         break;
                     }
-                    socket.write(&data).unwrap();
+                    socket.write(&data[0..count]).unwrap();
                 }
             },
             Err(e) => println!("couldn't get client: {:?}", e)
