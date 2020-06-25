@@ -289,11 +289,10 @@ impl Server {
                     flag = false;
                 }
                 let host = hosts[i].read().unwrap();
-                if (host.ipaddr == header.src_ip &&
+                if !(host.ipaddr == header.src_ip &&
                     host.port == header.src_port) && 
                 ((amigateway && gateway && !host.gateway) ||
                 (amigateway && host.gateway && !gateway)) {
-                    println!("Here");
                     continue;
                 }
                 current = Server::copy_discovery_data(&mut buf,
@@ -409,7 +408,6 @@ impl Server {
         let buffer_size = bytes::extract::extract_u16(&data,
             current);
         if dest_addr != format!("{}:{}", header.dest_ip, header.dest_port) {
-            println!("here");
             let src_ip = header.dest_ip;
             let listen_tcp_port = tcp::forward(
                 &header.src_ip,
